@@ -1,0 +1,7 @@
+{
+  "appId": "io.github.scoregie.familyhealthplanner",
+  "appName": "Family Health Planner",
+  "webDir": "www",
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "never" }
+}

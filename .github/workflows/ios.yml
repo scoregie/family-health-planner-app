@@ -1,0 +1,34 @@
+# Builds the iOS app for the iPhone simulator for every change, to check it compiles. Signed
+# builds for TestFlight and the App Store need the Apple signing secrets (see docs/publishing.md).
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx cap sync ios
+      - name: Build for the simulator
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+      - name: Keep the simulator app
+        run: cd ios/App/build/Build/Products/Debug-iphonesimulator && zip -qr "$GITHUB_WORKSPACE/FamilyHealthPlanner-simulator.zip" App.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator
+          path: FamilyHealthPlanner-simulator.zip
