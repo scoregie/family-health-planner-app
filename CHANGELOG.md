@@ -2,6 +2,10 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.2.4 (2026-11-10)
+
+Matches web v1.4.5: **snacks are shuffled**, so people and plans get a variety instead of the first few in the library, with snacks matching foods someone loves first. **Rebuild** gives new ones.
+
 ## v0.2.3 (2026-11-10)
 
 Catches up with the web version's shared library (`library-community.json`):
