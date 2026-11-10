@@ -6618,6 +6618,737 @@
     "sesame"
    ],
    "cost": 2.55
+  },
+  {
+   "name": "Cheese and mushroom omelette with toast",
+   "meal": "breakfast",
+   "cuisine": "French",
+   "minutes": 15,
+   "kit": [
+    "stovetop"
+   ],
+   "per": [
+    [
+     "egg",
+     2
+    ],
+    [
+     "mushrooms",
+     50
+    ],
+    [
+     "spinach",
+     30
+    ],
+    [
+     "cheddar",
+     20
+    ],
+    [
+     "butter",
+     5
+    ],
+    [
+     "bread",
+     40
+    ]
+   ],
+   "steps": [
+    "Slice the mushrooms and soften them in half the butter in a small frying pan for 3 minutes. Stir in the spinach until it wilts, then tip it all onto a plate.",
+    "Beat the eggs with a pinch of salt. Melt the rest of the butter in the pan over medium heat and pour the eggs in.",
+    "Gently pull the set edges into the middle a few times. When the top is nearly set, spoon the mushrooms, spinach and grated cheese over one half.",
+    "Fold the omelette in half, slide it onto the plate and serve with the toast."
+   ],
+   "separate": true,
+   "kid": "Leave the filling on the side if they'd rather have a plain omelette.",
+   "macros": {
+    "p": 26,
+    "c": 21,
+    "f": 23,
+    "kj": 1650
+   },
+   "groups": {
+    "veg": 1.1,
+    "grain": 1,
+    "protein": 1.1,
+    "dairy": 0.5,
+    "fv": 80,
+    "side": 80,
+    "gc": 17,
+    "mp": 14,
+    "ca": 142
+   },
+   "tags": [
+    "animal",
+    "egg",
+    "gluten",
+    "milk"
+   ],
+   "cost": 3.34
+  },
+  {
+   "name": "French toast with berries and yoghurt",
+   "meal": "breakfast",
+   "cuisine": "French",
+   "minutes": 15,
+   "kit": [
+    "stovetop",
+    "microwave"
+   ],
+   "per": [
+    [
+     "bread",
+     80
+    ],
+    [
+     "egg",
+     1
+    ],
+    [
+     "milk",
+     60
+    ],
+    [
+     "butter",
+     5
+    ],
+    [
+     "frozen berries",
+     60
+    ],
+    [
+     "greek yoghurt",
+     50
+    ]
+   ],
+   "steps": [
+    "Whisk the egg and milk in a shallow dish with a pinch of cinnamon if you have some.",
+    "Soak each slice of bread in the mixture for a few seconds a side.",
+    "Fry in the butter over medium heat for 2 to 3 minutes a side, until golden.",
+    "Warm the berries in the microwave for 1 minute and spoon them over with the yoghurt."
+   ],
+   "separate": true,
+   "kid": "Cut into fingers for dipping in the yoghurt.",
+   "macros": {
+    "p": 24,
+    "c": 47,
+    "f": 17,
+    "kj": 1810
+   },
+   "groups": {
+    "fruit": 0.4,
+    "grain": 2,
+    "protein": 0.6,
+    "dairy": 0.5,
+    "fv": 60,
+    "gc": 34,
+    "mp": 7,
+    "ca": 118
+   },
+   "tags": [
+    "animal",
+    "egg",
+    "gluten",
+    "lactose",
+    "milk"
+   ],
+   "cost": 1.95
+  },
+  {
+   "name": "Crustless ham and spinach quiche",
+   "meal": "lunch",
+   "cuisine": "French",
+   "minutes": 40,
+   "kit": [
+    "oven"
+   ],
+   "per": [
+    [
+     "egg",
+     2
+    ],
+    [
+     "milk",
+     60
+    ],
+    [
+     "ham",
+     30
+    ],
+    [
+     "cheddar",
+     25
+    ],
+    [
+     "spinach",
+     30
+    ],
+    [
+     "onion",
+     30
+    ],
+    [
+     "salad leaves",
+     40
+    ]
+   ],
+   "steps": [
+    "Heat the oven to 180°C and grease a small baking dish (or a muffin tray for mini ones).",
+    "Chop the onion finely, the ham into small pieces and the spinach roughly.",
+    "Whisk the eggs and milk, then stir in the onion, ham, spinach and half the grated cheese. Pour into the dish and scatter the rest of the cheese on top.",
+    "Bake for 25 to 30 minutes (15 to 18 for mini ones) until set in the middle. Serve warm or cold with the salad leaves."
+   ],
+   "leftovers": true,
+   "packable": true,
+   "batch": true,
+   "kid": "Mini ones from a muffin tray fit well in a lunchbox.",
+   "macros": {
+    "p": 28,
+    "c": 10,
+    "f": 24,
+    "kj": 1550
+   },
+   "groups": {
+    "veg": 1.3,
+    "protein": 1.1,
+    "dairy": 0.9,
+    "fv": 100,
+    "red": 26,
+    "side": 100,
+    "mp": 19,
+    "ca": 246
+   },
+   "tags": [
+    "animal",
+    "egg",
+    "lactose",
+    "meat",
+    "milk",
+    "pork",
+    "red"
+   ],
+   "cost": 4.21
+  },
+  {
+   "name": "Croque monsieur with side salad",
+   "meal": "lunch",
+   "cuisine": "French",
+   "minutes": 15,
+   "kit": [
+    "stovetop"
+   ],
+   "per": [
+    [
+     "bread",
+     80
+    ],
+    [
+     "ham",
+     40
+    ],
+    [
+     "cheddar",
+     30
+    ],
+    [
+     "butter",
+     8
+    ],
+    [
+     "salad leaves",
+     40
+    ],
+    [
+     "tomato",
+     0.5
+    ]
+   ],
+   "steps": [
+    "Make a sandwich with the ham and half the grated cheese between the two slices of bread.",
+    "Butter the outsides lightly and cook in a frying pan over medium-low heat for 3 minutes a side, pressing down gently, until golden and melty.",
+    "Sprinkle the rest of the cheese on top for the last minute with a lid on, so it melts.",
+    "Serve with the salad leaves and sliced tomato."
+   ],
+   "separate": true,
+   "kid": "Cut into triangles; serve the tomato on the side.",
+   "macros": {
+    "p": 25,
+    "c": 40,
+    "f": 23,
+    "kj": 1950
+   },
+   "groups": {
+    "veg": 1.5,
+    "grain": 2,
+    "dairy": 0.8,
+    "fv": 115,
+    "red": 34,
+    "side": 115,
+    "gc": 34,
+    "mp": 7,
+    "ca": 213
+   },
+   "tags": [
+    "animal",
+    "gluten",
+    "meat",
+    "milk",
+    "pork",
+    "red"
+   ],
+   "cost": 3.47
+  },
+  {
+   "name": "Tuna niçoise salad",
+   "meal": "lunch",
+   "cuisine": "French",
+   "minutes": 25,
+   "kit": [
+    "stovetop"
+   ],
+   "per": [
+    [
+     "tuna",
+     95
+    ],
+    [
+     "potato",
+     150
+    ],
+    [
+     "green beans",
+     70
+    ],
+    [
+     "egg",
+     1
+    ],
+    [
+     "tomato",
+     0.5
+    ],
+    [
+     "lettuce",
+     0.1
+    ],
+    [
+     "oil",
+     10
+    ],
+    [
+     "lemon",
+     0.25
+    ]
+   ],
+   "steps": [
+    "Cut the potato into chunks and boil for 12 minutes. Add the trimmed beans and the egg for the last 7 minutes.",
+    "Drain, cool the egg in cold water, then peel and quarter it.",
+    "Arrange the torn lettuce, potato, beans, tomato wedges, egg and drained tuna on a plate.",
+    "Whisk the oil and lemon juice with a pinch of salt and pour it over just before eating."
+   ],
+   "separate": true,
+   "packable": true,
+   "kid": "Keep everything in separate piles and leave off the dressing.",
+   "macros": {
+    "p": 37,
+    "c": 38,
+    "f": 17,
+    "kj": 1850
+   },
+   "groups": {
+    "veg": 4.5,
+    "protein": 1.4,
+    "fv": 185,
+    "fish": 95,
+    "side": 335,
+    "mp": 31
+   },
+   "tags": [
+    "animal",
+    "egg",
+    "fish"
+   ],
+   "cost": 4.14
+  },
+  {
+   "name": "Lentil and vegetable soup with bread",
+   "meal": "lunch",
+   "cuisine": "French",
+   "minutes": 35,
+   "kit": [
+    "stovetop"
+   ],
+   "per": [
+    [
+     "red lentils",
+     50
+    ],
+    [
+     "carrot",
+     80
+    ],
+    [
+     "celery",
+     0.1
+    ],
+    [
+     "onion",
+     50
+    ],
+    [
+     "potato",
+     100
+    ],
+    [
+     "garlic",
+     0.07
+    ],
+    [
+     "veg stock",
+     300
+    ],
+    [
+     "oil",
+     8
+    ],
+    [
+     "bread",
+     50
+    ]
+   ],
+   "steps": [
+    "Dice the onion, carrot, celery and potato, and crush the garlic.",
+    "Soften the onion, carrot and celery in the oil in a big pot for 5 minutes, then stir in the garlic for 1 minute.",
+    "Add the rinsed lentils, potato and stock. Simmer with the lid partly on for 20 to 25 minutes, until the lentils fall apart.",
+    "Season, blend part of it if you like it thicker, and serve with the bread."
+   ],
+   "leftovers": true,
+   "packable": true,
+   "batch": true,
+   "texture": [
+    "soft"
+   ],
+   "kid": "Blend it smooth if lumps are a problem.",
+   "macros": {
+    "p": 23,
+    "c": 88,
+    "f": 12,
+    "kj": 2230
+   },
+   "groups": {
+    "veg": 3.6,
+    "grain": 1.2,
+    "protein": 0.3,
+    "fv": 170,
+    "leg": 50,
+    "side": 270,
+    "gc": 21,
+    "mp": 12
+   },
+   "tags": [
+    "gluten"
+   ],
+   "cost": 2.17
+  },
+  {
+   "name": "Chicken ratatouille with potatoes",
+   "meal": "dinner",
+   "cuisine": "French",
+   "minutes": 45,
+   "kit": [
+    "stovetop"
+   ],
+   "per": [
+    [
+     "chicken thigh",
+     150
+    ],
+    [
+     "zucchini",
+     0.4
+    ],
+    [
+     "capsicum",
+     0.4
+    ],
+    [
+     "onion",
+     50
+    ],
+    [
+     "garlic",
+     0.07
+    ],
+    [
+     "canned tomatoes",
+     120
+    ],
+    [
+     "potato",
+     200
+    ],
+    [
+     "oil",
+     10
+    ]
+   ],
+   "steps": [
+    "Cut the chicken, zucchini and capsicum into bite-sized pieces, slice the onion and crush the garlic. Cut the potatoes into chunks.",
+    "Brown the chicken in half the oil in a large pan, then set it aside.",
+    "Cook the onion, capsicum and zucchini in the rest of the oil for 5 minutes. Add the garlic, tomatoes, a pinch of dried herbs and the chicken.",
+    "Simmer for 20 minutes until the chicken is cooked through. Meanwhile boil the potatoes for 15 minutes until tender, and serve together."
+   ],
+   "leftovers": true,
+   "batch": true,
+   "texture": [
+    "mixed"
+   ],
+   "kid": "Serve the potatoes plain beside a small spoon of the stew.",
+   "macros": {
+    "p": 37,
+    "c": 52,
+    "f": 17,
+    "kj": 2090
+   },
+   "groups": {
+    "veg": 7,
+    "protein": 1.5,
+    "fv": 322,
+    "side": 522,
+    "mp": 29
+   },
+   "tags": [
+    "meat",
+    "poultry"
+   ],
+   "cost": 4.43
+  },
+  {
+   "name": "Creamy chicken and mushroom fricassee with rice",
+   "meal": "dinner",
+   "cuisine": "French",
+   "minutes": 35,
+   "kit": [
+    "stovetop"
+   ],
+   "per": [
+    [
+     "chicken thigh",
+     150
+    ],
+    [
+     "mushrooms",
+     100
+    ],
+    [
+     "onion",
+     50
+    ],
+    [
+     "stock",
+     80
+    ],
+    [
+     "cream",
+     40
+    ],
+    [
+     "rice",
+     70
+    ],
+    [
+     "green beans",
+     80
+    ],
+    [
+     "oil",
+     8
+    ]
+   ],
+   "steps": [
+    "Start the rice cooking. Cut the chicken into strips, slice the mushrooms and chop the onion.",
+    "Brown the chicken in the oil, then add the onion and mushrooms and cook for 5 minutes.",
+    "Pour in the stock and simmer for 8 minutes, then stir in the cream and let it bubble gently until it thickens a little.",
+    "Steam or boil the beans for 4 minutes and serve everything with the rice."
+   ],
+   "separate": true,
+   "kid": "Serve the chicken with a little sauce, and the rice and beans on the side.",
+   "macros": {
+    "p": 41,
+    "c": 71,
+    "f": 30,
+    "kj": 2990
+   },
+   "groups": {
+    "veg": 3.1,
+    "grain": 2.3,
+    "protein": 1.5,
+    "fv": 230,
+    "side": 230,
+    "gc": 56,
+    "mp": 29
+   },
+   "tags": [
+    "animal",
+    "lactose",
+    "meat",
+    "milk",
+    "poultry"
+   ],
+   "cost": 5.62
+  },
+  {
+   "name": "Salmon parcels with lemon, potatoes and beans",
+   "meal": "dinner",
+   "cuisine": "French",
+   "minutes": 35,
+   "kit": [
+    "oven"
+   ],
+   "per": [
+    [
+     "salmon",
+     130
+    ],
+    [
+     "potato",
+     200
+    ],
+    [
+     "zucchini",
+     0.3
+    ],
+    [
+     "green beans",
+     80
+    ],
+    [
+     "lemon",
+     0.25
+    ],
+    [
+     "oil",
+     8
+    ]
+   ],
+   "steps": [
+    "Heat the oven to 200°C. Cut the potatoes into small chunks, toss with half the oil and roast for 15 minutes.",
+    "Lay each piece of salmon on a sheet of baking paper with thin slices of zucchini, the beans, a slice of lemon, the rest of the oil and a pinch of salt.",
+    "Fold the paper into a sealed parcel and put the parcels on the tray with the potatoes.",
+    "Bake for 15 minutes more, until the salmon flakes easily. Open the parcels at the table."
+   ],
+   "separate": true,
+   "kid": "Flake the salmon and check for bones before serving.",
+   "macros": {
+    "p": 33,
+    "c": 45,
+    "f": 26,
+    "kj": 2250
+   },
+   "groups": {
+    "veg": 4.5,
+    "protein": 1.1,
+    "fv": 140,
+    "fish": 130,
+    "oily": 130,
+    "side": 340,
+    "mp": 27
+   },
+   "tags": [
+    "animal",
+    "fish"
+   ],
+   "cost": 7.69
+  },
+  {
+   "name": "Slow-cooker beef and mushroom bourguignon",
+   "meal": "dinner",
+   "cuisine": "French",
+   "minutes": 30,
+   "kit": [
+    "slow cooker",
+    "stovetop"
+   ],
+   "per": [
+    [
+     "beef steak",
+     150
+    ],
+    [
+     "mushrooms",
+     80
+    ],
+    [
+     "carrot",
+     80
+    ],
+    [
+     "onion",
+     50
+    ],
+    [
+     "garlic",
+     0.07
+    ],
+    [
+     "tomato paste",
+     15
+    ],
+    [
+     "stock",
+     150
+    ],
+    [
+     "potato",
+     200
+    ],
+    [
+     "butter",
+     5
+    ],
+    [
+     "milk",
+     30
+    ]
+   ],
+   "steps": [
+    "In the morning, cut the beef into large chunks, the carrot into thick slices and the onion into wedges. Halve the mushrooms.",
+    "Put everything except the potatoes, butter and milk into the slow cooker with the crushed garlic, tomato paste, stock and a bay leaf if you have one. Cook on low for 8 hours.",
+    "Before dinner, boil the peeled potatoes for 15 minutes, then mash with the butter and milk.",
+    "Serve the beef and its sauce over the mash."
+   ],
+   "leftovers": true,
+   "batch": true,
+   "texture": [
+    "mixed"
+   ],
+   "kid": "Cut the beef small and serve the mash on the side.",
+   "macros": {
+    "p": 44,
+    "c": 56,
+    "f": 12,
+    "kj": 2100
+   },
+   "groups": {
+    "veg": 5.5,
+    "protein": 1.7,
+    "dairy": 0.1,
+    "fv": 210,
+    "red": 105,
+    "side": 410,
+    "mp": 33,
+    "ca": 34
+   },
+   "tags": [
+    "animal",
+    "beef",
+    "lactose",
+    "meat",
+    "milk",
+    "poultry",
+    "red"
+   ],
+   "cost": 7.16
   }
  ],
  "snacks": [
