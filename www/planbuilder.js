@@ -7,8 +7,22 @@
 //   - Shared family dinners are picked from the library to suit everyone where possible. Anyone a
 //     dinner doesn't suit gets their own dinner that night instead.
 //   - Portions come from age, size, activity and goal. Children are never given less to lose weight.
+//   - Health comes before likes: everyone's days are topped up with vegetable sides and fruit until
+//     they reach the guideline serves for their age and sex (healthtargets.js). What people find
+//     hard to eat decides the form (soft, blended), and likes choose between dishes that fit.
+//     Each person picks the pace in About me: from week 1, building up by week 3, or no change.
 //   - Shopping lists add up every recipe's amounts for the people eating them, in whole packs.
 //     Things that keep (pantry, freezer, cheese) carry over between weeks so nothing is bought twice.
+//   - Food the family already has (the kitchen list on Plan setup, opts.pantry) is used first:
+//     dishes that use it score higher, and what it covers is left off the shopping lists.
+//   - Feedback counts: a meal someone scored well comes back more often for them and one they
+//     scored poorly less often (each person's own scores, or the family's average, opts.rated).
+//     Notes people wrote can't be read by rules, so they are passed on to the admin.
+//   - Logged health numbers count: someone's latest logged weight is used in place of the one in
+//     About me, and their average steps can lift their activity level.
+//   - People who aren't keen on vegetables or fruit get one small new food to try each week,
+//     a short step on from a food they already like ("small steps").
+//   - Fresh food likely to be left at the end of a week is listed so it gets used up.
 //   - Outside Australia, shop names, pack sizes and prices come from library-prices.json
 //     (opts.country), and recipe words change to the local ones ("capsicum" to "pepper").
 //   - Exercise builds gently over the 4 weeks from each person's time, equipment and health notes.
@@ -19,6 +33,9 @@
 const ON_SERVER = typeof require === 'function';
 let LIB = ON_SERVER ? require('./library.json') : null;
 let EXERCISES = ON_SERVER ? require('./exercises.json').exercises : [];
+// The vegetable and fruit serves to aim for, and how a plan measures up (healthtargets.js).
+// The phone app loads healthtargets.js before this file, which puts it on window.
+const TARGETS = ON_SERVER ? require('./healthtargets') : window.HealthTargets;
 
 // Local shop names, pack sizes and prices for other countries (made by tools/build_prices.py).
 // Australia's are in library.json. A copy of the app without the file prices everything in AUD.
@@ -202,6 +219,10 @@ function providedDays(a) {
 // Whether they can get to a pool (at home or a public one; "Pool" is the older answer).
 const hasPool = equipment => ['Pool', 'Pool at home', 'Public pool or swim centre'].some(p => equipment.has(p));
 
+// A dislike that names a whole food group rather than a food, after words() has tidied it:
+// "most veggy" (from "most veggies"), "vegetable", "fruit", "greens".
+const BROAD_DISLIKE = /^(most |all |any )?(veg|veggy|vegy|veggie|vegie|vegetable|fruit|green|salad stuff|healthy food)$/;
+
 // Turns one person's About me answers into rules for the builder: allergies and diets, foods they
 // won't eat, how they like to eat, cooking time, budget, health conditions and so on.
 function rulesFor(p) {
@@ -214,6 +235,9 @@ function rulesFor(p) {
     avoidWords: [],       // foods they won't eat
     avoidTexture: new Set(),
     likeWords: words(a.likes).concat(words(a.safe_foods)),
+    usualWords: words(a.usual_day),   // what they eat now, so the plan can start near it
+    rated: (p.feedback && p.feedback.rated) || {},   // their own scores for earlier meals, out of 10
+    tried: p.tried || {},             // new foods they've been offered: "tried", "liked" or "not yet"
     cuisines: new Set(list(a.cuisines).map(c => CUISINE[c] || c)),
     cookLimit: COOK_LIMIT[a.cook_time] || null,
     cooks: a.cook_time !== "I don't cook",
@@ -242,9 +266,21 @@ function rulesFor(p) {
     if (d === 'No pork') r.diet.add('pork');
     if (d === 'No beef') r.diet.add('beef');
   }
-  r.avoidWords.push(...words(a.dislikes));
-  // "Most veggies" or "vegetables" in their dislikes: prefer dishes with fewer vegetables (not a ban).
-  r.fewVeg = /\b(veg|veggies|vegies|vegetables?)\b/i.test(String(a.dislikes || ''));
+  // Foods they won't eat. A child's sweeping dislikes ("most veggies", "fruit") aren't a ban:
+  // they still get vegetables and fruit, in forms that are easier to eat (see gentleVeg below).
+  // Named foods ("corn", "mushrooms") are always left out, whatever their age.
+  const child = age !== null && age < 18;
+  r.avoidWords.push(...words(a.dislikes).filter(w => !(child && BROAD_DISLIKE.test(w))));
+  // Vegetables or fruit as a whole in their dislikes: serve them soft, cooked in or blended.
+  r.gentleVeg = /\b(veg|veggies|vegies|vegetables?|greens)\b/i.test(String(a.dislikes || ''));
+  r.gentleFruit = /\bfruits?\b/i.test(String(a.dislikes || ''));
+  // New foods they tried and liked count as foods they like.
+  for (const [food, result] of Object.entries(r.tried)) if (result === 'liked') r.likeWords.push(...words(food));
+  // The serves of vegetables and fruit a day to aim for, from their age and sex, and how fast
+  // they chose to get there: "full" (from week 1), "build" (by week 3) or "own" (no change).
+  r.target = TARGETS.targetFor(a);
+  r.pace = TARGETS.paceFor(a);
+  r.weekTarget = n => TARGETS.weekTarget(a, n);
   if (r.sensory.has('Spicy food')) r.diet.add('spicy');
   if (r.sensory.has('Lumpy or mixed textures (like stews)')) r.avoidTexture.add('mixed');
   if (r.sensory.has('Mushy or soft textures')) r.avoidTexture.add('soft');
@@ -263,10 +299,16 @@ function portionFor(p, r) {
   if (age < 13) return 0.8;
   const sex = a.sex === 'Male' ? 'm' : a.sex === 'Female' ? 'f' : null;
   if (age < 18) return sex === 'm' ? 1.1 : 0.95;
-  const w = num(a.weight), h = num(a.height);
+  // Their latest logged weight (Health sync, Apple Health or Lose It) if there is one, else About me's.
+  const logged = p.measured && num(p.measured.weight);
+  const w = logged || num(a.weight), h = num(a.height);
   if (!w || !h || w < 30 || w > 300 || h < 120 || h > 230) return sex === 'm' ? 1.1 : sex === 'f' ? 0.9 : 1;
   const bmr = 10 * w + 6.25 * h - 5 * age + (sex === 'm' ? 5 : sex === 'f' ? -161 : -78);
-  const activity = { 'Mostly sitting (desk job)': 1.35, 'On my feet some of the day': 1.5, 'On my feet most of the day': 1.65, 'Physical work all day': 1.85 }[a.activity] || 1.45;
+  let activity = { 'Mostly sitting (desk job)': 1.35, 'On my feet some of the day': 1.5, 'On my feet most of the day': 1.65, 'Physical work all day': 1.85 }[a.activity] || 1.45;
+  // Logged steps can lift this: about 9,000 a day or more is at least "on my feet some of the day".
+  const steps = p.measured && num(p.measured.steps);
+  if (steps >= 12000) activity = Math.max(activity, 1.65);
+  else if (steps >= 9000) activity = Math.max(activity, 1.5);
   let kcal = bmr * activity;
   const goals = new Set(list(a.goal));
   const pregnant = r.conditions.has('Pregnant or breastfeeding');
@@ -274,6 +316,78 @@ function portionFor(p, r) {
   else if (goals.has('Gain weight') || goals.has('Build muscle')) kcal *= 1.1;
   if (pregnant) kcal += 350;
   return Math.min(1.5, Math.max(0.7, round(kcal * 4.184 / 8700, 0.05)));
+}
+
+// ---------------------------------------------------------------------------
+// Food already in the kitchen
+// ---------------------------------------------------------------------------
+
+// Words in a kitchen list that describe the packaging, not the food.
+const PACK_WORDS = /\b(tins?|cans?|packs?|packets?|bags?|boxe?s?|bottles?|jars?|cartons?|tubs?|loaf|loaves|bunch(es)?|heads?|pieces?|of|a|an|some|half|dozen|about|x)\b/g;
+
+// Everyday names for library ingredients, as people write them on a kitchen list (plurals removed).
+const KITCHEN_NAMES = { cheese: 'cheddar', spaghetti: 'pasta', penne: 'pasta', macaroni: 'pasta', noodle: 'egg noodles',
+  yoghurt: 'greek yoghurt', yogurt: 'greek yoghurt', chicken: 'chicken breast', mince: 'beef mince', sausage: 'beef sausages',
+  steak: 'beef steak', fish: 'white fish', lentil: 'red lentils', bean: 'baked beans', vegetable: 'frozen veg' };
+// Words that make it a different food ("tomato sauce" isn't tomatoes), or name no food by themselves.
+const DIFFERENT_FOOD = ['sauce', 'paste', 'soup', 'juice', 'powder', 'chip', 'flavour', 'flavoured', 'cake', 'biscuit'];
+const TOO_VAGUE = ['fruit', 'frozen', 'canned', 'tinned', 'fresh', 'food', 'meat', 'milk powder'];
+
+// The library ingredient a food on the kitchen list means, or null: "eggs" is "egg", "peas" is
+// "frozen peas", "brown rice" is "rice", "diced tomatoes" is "canned tomatoes".
+function ingredientFor(food) {
+  // Words without plurals or hyphens: "Weet-Bix biscuits" -> ["weetbix", "biscuit"].
+  const tidy = text => String(text).toLowerCase().replace(/-/g, '').replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean)
+    .map(w => w.replace(/(ies)$/, 'y').replace(/(oes)$/, 'o').replace(/s$/, ''));
+  const want = tidy(food);
+  if (!want.length || TOO_VAGUE.includes(want.join(' '))) return null;
+  if (KITCHEN_NAMES[want.join(' ')]) return KITCHEN_NAMES[want.join(' ')];
+  let best = null, bestScore = 0;
+  for (const key of Object.keys(LIB.ingredients)) {
+    const k = tidy(key);
+    const name = tidy(LIB.ingredients[key].name.replace(/\d+(\.\d+)?\s*(kg|g|ml|l)\b/gi, ''));
+    // It's a match when every word they wrote is in the ingredient's key or shop name ("diced
+    // tomatoes"), or the whole key is in what they wrote ("brown rice" has "rice").
+    const inKey = want.filter(w => k.includes(w)).length;
+    const inName = want.filter(w => !k.includes(w) && name.includes(w)).length;
+    if (!inKey && !inName) continue;
+    if (inKey + inName < want.length && !k.every(w => want.includes(w))) continue;
+    if (want.some(w => DIFFERENT_FOOD.includes(w) && !k.includes(w) && !name.includes(w))) continue;
+    // Words in the key count most, then the shop name; a key with extra words loses a little.
+    const score = inKey * 2 + inName * 1.5 - k.filter(w => !want.includes(w)).length * 0.1;
+    if (score > bestScore) { best = key; bestScore = score; }
+  }
+  return best;
+}
+
+// Reads the family's kitchen list (lines like "rice 2 kg", "6 eggs", "frozen peas") into amounts
+// of library ingredients. Returns {stock: {ingredient key: [{amount, until}]}, counted: [names],
+// unknown: [what it couldn't match]}. "until" is the last meal week (0 to 3) the food keeps for.
+// No amount means one pack; a number without a unit means that many (eggs) or that many packs.
+function kitchenStock(lines) {
+  const stock = {}, counted = [], unknown = [];
+  for (const line of list(lines).slice(0, 200)) {
+    for (const part of String(line).split(/[,;\n]/)) {
+      const text = part.trim().toLowerCase();
+      if (!text) continue;
+      const m = text.match(/(\d+(?:\.\d+)?)\s*(kg|g|grams?|ml|l|litres?|liters?)?\b/);
+      const food = text.replace(/(\d+(?:\.\d+)?)\s*(kg|g|grams?|ml|l|litres?|liters?)?\b/g, ' ').replace(PACK_WORDS, ' ');
+      const key = ingredientFor(food);
+      if (!key) { unknown.push(part.trim().slice(0, 60)); continue; }
+      const ing = ING[key];
+      if (ing.aisle === 'assumed' || !ing.pack) continue;   // oil, salt, spices: never on the list anyway
+      const number = m ? parseFloat(m[1]) : null;
+      const unit = m && m[2] ? m[2][0] : '';
+      let amount = ing.pack;                                   // no amount given: one pack
+      if (number && unit && ing.unit !== 'each') amount = number * (m[2] === 'kg' || unit === 'l' ? 1000 : 1);
+      else if (number) amount = ing.unit === 'each' ? number : number * ing.pack;
+      const keeps = KEEPS_ITEM[key] || KEEPS[ing.aisle] || 5;
+      const longLife = ing.aisle === 'pantry' || ing.aisle === 'frozen';
+      (stock[key] = stock[key] || []).push({ amount, until: longLife ? 3 : Math.min(3, Math.floor(keeps / 7)) });
+      if (!counted.includes(ing.name)) counted.push(ing.name);
+    }
+  }
+  return { stock, counted, unknown };
 }
 
 // ---------------------------------------------------------------------------
@@ -310,16 +424,37 @@ function score(d, eaters, house, rnd) {
     if (!allowed(d, r)) { s -= 10; continue; }   // they'll get their own dinner that night
     if (d.meal === 'lunch' && r.packed && !d.packable) s -= 4;
     for (const w of r.likeWords) if (w && text.includes(w)) s += 3;
+    // Dishes like what they eat now score higher for people easing in or keeping to their own food.
+    if (r.pace !== 'full') for (const w of r.usualWords) if (w && text.includes(w)) s += 2;
     if (r.cuisines.has(d.cuisine)) s += 2;
-    if (r.fewVeg) s -= ((d.groups && d.groups.veg) || 0) * 1.5;
+    // Dishes with more vegetables score a little higher (up to 3 serves), for everyone. Anything
+    // still missing is added as sides afterwards (see topUp).
+    const veg = (d.groups && d.groups.veg) || 0;
+    s += Math.min(veg, 3) * 0.3;
+    // Not keen on vegetables: prefer them cooked in (stews, soups, sauces) over raw or on their own.
+    if (r.gentleVeg && veg >= 1 && (d.texture || []).some(x => x === 'soft' || x === 'mixed')) s += 1.5;
     if (r.sensory.has('Foods touching on the plate') && d.separate) s += 2;
     if (r.help.has('Meals with only a few steps') && d.steps.length > 3) s -= 2;
     if (r.help.has('One-pan or tray-bake meals') && d.onepan) s += 2;
     if (r.help.has('Cooking a batch on a good day') && d.batch) s += 1.5;
     if (r.sensory.has('Strong smells') && (d.tags || []).includes('fish')) s -= 2;
   }
+  // What people thought of this dish last time, out of 10. Each person's own score counts most
+  // (8 adds about 1.5 for them, 3 takes about 2.5 off); for anyone who hasn't scored it, the
+  // family's average counts half as much. Dishes nobody has rated are left alone.
+  const family = house.rated && house.rated[d.name.toLowerCase()];
+  for (const r of eaters) {
+    const own = r.rated[d.name.toLowerCase()];
+    if (typeof own === 'number') s += (own - 6) * 0.8;
+    else if (typeof family === 'number') s += (family - 6) * 0.4 / eaters.length;
+  }
+  // Food already in the kitchen: dishes that use it score higher, and it costs nothing to use,
+  // so its price comes off what the dish costs.
+  const owned = house.ownedNow ? d.per.filter(x => house.ownedNow.has(x[0])) : [];
+  const ownedCost = owned.reduce((n, [k, amount]) => n + ING[k].price / ING[k].pack * amount, 0);
+  s += Math.min(owned.length, 3) * 0.5 + ownedCost;
   if (house.cookLimit && d.minutes > house.cookLimit) s -= (d.minutes - house.cookLimit) / 5;
-  if (house.budget) s -= d.cost * house.costWeight;
+  if (house.budget) s -= (d.cost - ownedCost) * house.costWeight;
   return s;
 }
 
@@ -621,6 +756,11 @@ function build(people, opts) {
     costWeight: 0.6,
   };
   if (house.cookLimit === Infinity) house.cookLimit = null;
+  // Food already in the kitchen (the list on Plan setup), as amounts of library ingredients.
+  // The family's average rating of each dish they've scored: {"lower-case dish name": 0 to 10}.
+  house.rated = (opts && opts.rated) || {};
+  const kitchen = kitchenStock(opts && opts.pantry);
+  house.stock = kitchen.stock;
   const repeat = rules.some(r => r.help.has('Eating the same meals often (fewer decisions)') || r.sensory.has('A brand or recipe changing'));
   const forAdmin = [];
 
@@ -636,6 +776,18 @@ function build(people, opts) {
     house.costWeight *= 2.5;
     forAdmin.length = 0;
   } while (true);
+  // Feedback: scores were used above. Notes can't be read by rules, so the admin gets them.
+  const scored = people.filter(p => p.feedback && Object.keys(p.feedback.rated || {}).length).map(p => p.name);
+  if (scored.length) forAdmin.push('Meal scores from ' + scored.join(', ') + ' were used: meals they scored well come back more often, and ones they scored poorly less often.');
+  const said = people.flatMap(p => ((p.feedback && p.feedback.notes) || []).slice(0, 5).map(n => p.name + ' on ' + n.dish + ': “' + n.note + '”'));
+  if (said.length) forAdmin.push('The plan builder can’t read written notes, so check these against the new plan: ' + said.slice(0, 10).join('; ') + '. (An AI-written plan reads them.)');
+  const loggedBy = people.filter(p => p.measured && p.measured.weight).map(p => p.name);
+  if (loggedBy.length) forAdmin.push('Serves for ' + loggedBy.join(', ') + ' use their latest logged weight in place of the one in About me.');
+  if (kitchen.counted.length) forAdmin.push('From your kitchen list, the plan counts: ' + kitchen.counted.join(', ') + '. Meals that use them were preferred, and what they cover is left off the shopping lists.');
+  if (kitchen.unknown.length) forAdmin.push('Not matched to anything in the meal library, so not counted: ' + kitchen.unknown.join(', ') + '.');
+  // Anyone still short of their vegetable or fruit serves (their answers ruled out the options).
+  const shortNote = TARGETS.shortNote(plan, people);
+  if (shortNote) forAdmin.push(shortNote);
   if (!adults.length) forAdmin.push('Everyone in the plan is a child, so portions are child-sized. Add the adults to the family for a full plan.');
   if (local && local.words) plan = reword(plan, PRICES.words[local.words]);
   return { plan, notesForAdmin: forAdmin.join(' ') };
@@ -669,7 +821,10 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
 
   const mealWeeks = [];
   let fixedDinners = null;
+  // The kitchen foods that still keep in meal week `w` (fresh food only counts for the first weeks).
+  const ownedIn = w => new Set(Object.keys(house.stock || {}).filter(k => house.stock[k].some(x => x.until >= w)));
   for (let w = 0; w < 4; w++) {
+    house.ownedNow = ownedIn(w);
     // Dinners for the week.
     let week;
     if (repeat && fixedDinners && w % 2 === 1) week = fixedDinners;
@@ -699,6 +854,7 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
   }
 
   // Per-person swaps: anyone a shared dish doesn't suit gets one that does.
+  house.ownedNow = ownedIn(0);
   const own = {};   // person key -> {dinner: [dishes], breakfast, lunch}
   for (const r of rules) {
     const myDinners = dinners.filter(d => allowed(d, r));
@@ -821,7 +977,7 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
       const p = planPeople[r.key];
       if (!p.weekday) {
         const packs = own[r.key].lunches.filter(d => d.packable);
-        const kidSnacks = snackOrder(LIB.snacks.filter(s => s.kids && available(s) && allowed(s, r)), r, rnd);
+        const kidSnacks = snackOrder(LIB.snacks.filter(s => s.kids && s.kind !== 'side' && available(s) && allowed(s, r)), r, rnd);
         p.weekday = {};
         DAYS.slice(0, 5).forEach((d, i) => {
           const l = packs[i % Math.max(1, packs.length)];
@@ -857,6 +1013,13 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
     const r = rules[i];
     const p = planPeople[people[i].key];
     p.snacks = snacksFor(r, exercise[people[i].key], rnd);
+    // Top up to their serves at the pace they chose. Building up: weeks 1 and 2 aim lower than
+    // weeks 3 and 4, so anything added only for the later weeks is marked with those weeks.
+    if (r.pace === 'full') topUp(r, people[i].key, planPeople, weeks, used, null);
+    else if (r.pace === 'build') {
+      [[1], [2], [3, 4]].forEach(stage => topUp(r, people[i].key, planPeople, weeks, used, stage));
+      p.snacks = mergeWeeks(p.snacks);
+    }
     for (let w = 0; w < 4; w++) {
       const exWeek = exercise[people[i].key][w];
       for (const s of p.snacks) {
@@ -864,6 +1027,7 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
         if (!lib) continue;
         const days = DAYS.filter(d => {
           if (s.days && !s.days.includes(d)) return false;
+          if (s.weeks && !s.weeks.includes(w + 1)) return false;
           const exDay = exWeek.days.find(x => x.day === d) || {};
           if (s.exercise === 'strength') return !!exDay.strength;
           if (s.exercise === 'rest') return !exDay.strength;
@@ -873,16 +1037,20 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
       }
     }
     Object.assign(p, guideFor(r, people[i]));
+    const steps = smallSteps(r, people[i]);
+    if (steps.length) p.steps = steps;
   }
 
   // Shopping: buy in whole packs, carrying over what keeps.
-  const shopping = shoppingFor(needs);
+  const shopping = shoppingFor(needs, house.stock);
   const plan = { weeks: [] };
   for (let f = 0; f < 2; f++) {
     plan.weeks.push({ name: 'Stock-up ' + (f + 1), kind: 'stockup', shopping: shopping.stock[f] });
     for (let k = 0; k < 2; k++) {
       const w = weeks[f * 2 + k];
       w.shopping = shopping.weekly[f * 2 + k];
+      // Fresh food likely to be left over at the end of this week, so it gets used, not binned.
+      if (shopping.useUp[f * 2 + k].length) w.useUp = shopping.useUp[f * 2 + k];
       plan.weeks.push(w);
     }
   }
@@ -975,12 +1143,93 @@ function snackOrder(list, r, rnd) {
   return list.map(s => ({ s, k: rnd() + (loved(s) ? 1 : 0) })).sort((a, b) => b.k - a.k).map(x => x.s);
 }
 
+// Puts blended and soft forms first (mash, smoothies, steamed) when someone isn't keen on that
+// kind of food; otherwise leaves the order alone.
+function gentleFirst(list, gentle) {
+  if (!gentle) return list;
+  const rank = s => (s.blended ? 0 : (s.texture || []).includes('soft') ? 1 : 2);
+  return list.slice().sort((a, b) => rank(a) - rank(b));
+}
+
+// The food groups of every dish used so far and every library snack, by name, for measuring a
+// person's days against their targets.
+function groupsSoFar(used) {
+  const groups = {};
+  for (const [name, d] of used) groups[name] = d.groups;
+  for (const s of LIB.snacks) groups[s.what] = s.groups;
+  return groups;
+}
+
+// Tidies snacks added week by week: the same snack at the same time in several weeks becomes one
+// entry listing those weeks, and one that ends up in all four weeks loses its "weeks" list.
+function mergeWeeks(snacks) {
+  const out = [];
+  for (const s of snacks) {
+    const twin = s.weeks && out.find(x => x.weeks && x.when === s.when && x.what === s.what && String(x.days) === String(s.days));
+    if (twin) twin.weeks = [...new Set(twin.weeks.concat(s.weeks))].sort();
+    else out.push(Object.assign({}, s));
+  }
+  for (const s of out) if (s.weeks && s.weeks.length >= 4) delete s.weeks;
+  return out;
+}
+
+// The builder stops topping up once someone's days are within a quarter of a serve of their target.
+const NEAR_ENOUGH = 0.25;
+
+// Health targets come before likes: adds vegetable sides and fruit to one person's days until
+// their average reaches the guideline serves for their age and sex (within a quarter of a serve).
+// Sides go with dinner first, then lunch; fruit goes with breakfast, then after dinner. Only
+// foods their allergies, diet, textures and named dislikes allow are used, so someone whose
+// answers rule out every option stays short, and build() tells the admin.
+// `stage` is the meal weeks to top up, like [3, 4] (what's added is marked with those weeks), or
+// null for all four weeks at once.
+function topUp(r, key, planPeople, weeks, used, stage) {
+  const p = planPeople[key];
+  const target = stage ? r.weekTarget(stage[0]) : r.target;
+  const measure = () => TARGETS.dailyAverage({ weeks, people: planPeople, groups: groupsSoFar(used) }, key, stage);
+  // Something they don't already have in these weeks.
+  const sameWeeks = x => !stage || !x.weeks || x.weeks.some(n => stage.includes(n));
+  const fits = s => available(s) && allowed(s, r) && (!r.kid || s.kids) && !p.snacks.some(x => x.what === s.what && sameWeeks(x));
+  // Adds a side or fruit to their days, marked with the stage's weeks when it isn't every week.
+  const add = entry => { if (stage) entry.weeks = stage; p.snacks.push(entry); };
+  // What one of a snack or side costs, from its ingredients' pack prices.
+  const costOf = s => s.per.reduce((n, [k, amount]) => n + (ING[k].pack ? ING[k].price / ING[k].pack * amount : 0), 0);
+  // The option whose amount is closest to what's missing: gentle forms first when that matters,
+  // and the cheaper one when two are as close.
+  const closest = (options, group, gap, gentle) => gentleFirst(options, gentle)
+    .map((s, i) => ({ s, off: Math.abs(((s.groups || {})[group] || 0) - gap) + (gentle ? i : 0) + costOf(s) * 0.2 }))
+    .sort((a, b) => a.off - b.off).map(x => x.s)[0];
+
+  // Vegetables: a side with dinner, then with lunch (weekends only for children, who are at
+  // school; not on days work provides lunch), then a vegetable snack.
+  const lunchDays = r.kid ? ['Sat', 'Sun'] : DAYS.filter(d => !r.lunchProvided.has(d));
+  const vegSlots = [{ when: 'With dinner', kind: 'side' }, { when: 'With lunch', kind: 'side', days: lunchDays }, { when: 'Afternoon', kind: 'veg' }];
+  for (const slot of vegSlots) {
+    const gap = target.veg - measure().veg;
+    if (gap <= NEAR_ENOUGH) break;
+    if (slot.days && !slot.days.length) continue;   // no lunches at home to add a side to
+    const s = closest(LIB.snacks.filter(x => x.kind === slot.kind && fits(x)), 'veg', gap, r.gentleVeg);
+    if (!s) continue;
+    const entry = { when: slot.when, what: s.what };
+    if (slot.days && slot.days.length < 7) entry.days = slot.days;
+    add(entry);
+  }
+  // Fruit: with breakfast, then after dinner.
+  for (const when of ['With breakfast', 'After dinner']) {
+    const gap = target.fruit - measure().fruit;
+    if (gap <= NEAR_ENOUGH) break;
+    const s = closest(LIB.snacks.filter(x => x.kind === 'fruit' && fits(x)), 'fruit', gap, r.gentleFruit);
+    if (!s) break;
+    add({ when, what: s.what });
+  }
+}
+
 // Two snacks a day for each person, tied to exercise where it helps. Snacks are shuffled, so
 // different people and different plans get a variety rather than always the first in the library.
 function snacksFor(r, exWeeks, rnd) {
   const ok = snackOrder(LIB.snacks.filter(s => available(s) && allowed(s, r) && (!r.kid || s.kids)), r, rnd);
   const by = kind => ok.filter(s => s.kind === kind);
-  const protein = by('protein'), fruit = by('fruit'), other = ok.filter(s => s.kind === 'other' || s.kind === 'veg');
+  const protein = by('protein'), fruit = gentleFirst(by('fruit'), r.gentleFruit), other = ok.filter(s => s.kind === 'other' || s.kind === 'veg');
   const out = [];
   const lifts = exWeeks.some(w => w.days.some(d => d.strength));
   if (r.kid) {
@@ -1000,12 +1249,82 @@ function snacksFor(r, exWeeks, rnd) {
   return out;
 }
 
+// "Small steps": new foods to try, each a short step on from a food someone already likes (the
+// idea feeding therapists call food chaining). `like` is matched against what they said they
+// love, their safe foods and what they usually eat. Each step is [food, how to offer it, tags].
+// Tags are the allergy and diet tags the step would break, so those people are never offered it.
+const CHAINS = [
+  { like: /chips|fries|wedges|potato/, from: 'chips', steps: [
+    ['Oven-baked potato wedges', 'Next to the usual chips, a couple of wedges to start.', []],
+    ['Sweet potato wedges', 'Baked the same way as the potato wedges, a few on the same plate.', []],
+    ['Roast pumpkin wedges', 'Cut and baked like the wedges, one or two beside them.', []],
+    ['Roast carrot sticks', 'Baked until soft, a few next to the wedges.', []]] },
+  { like: /mac and cheese|macaroni|cheesy pasta|pasta/, from: 'mac and cheese', steps: [
+    ['Mac and cheese with a spoon of mashed pumpkin stirred into the sauce', 'It turns the sauce a little more orange and tastes much the same.', ['milk', 'lactose', 'gluten', 'animal']],
+    ['Mac and cheese with cauliflower blended into the sauce', 'Blend it smooth so the texture stays the same.', ['milk', 'lactose', 'gluten', 'animal']],
+    ['Mac and cheese with a few peas on the side of the bowl', 'On the side, not mixed in, to try one or two.', ['milk', 'lactose', 'gluten', 'animal']],
+    ['Mac and cheese with peas stirred through', 'A spoonful to start.', ['milk', 'lactose', 'gluten', 'animal']]] },
+  { like: /noodle/, from: 'noodles', steps: [
+    ['Noodles with a spoon of sweet corn or peas in the bowl', 'A teaspoon to start, whichever they mind less.', ['gluten']],
+    ['Noodles with finely grated carrot cooked in', 'Grated fine, it softens and nearly disappears.', ['gluten']],
+    ['Noodles with a few soft-cooked vegetables on the side', 'On the side of the bowl, to try a piece.', ['gluten']],
+    ['Noodles with soft vegetables mixed in', 'A small handful, cooked soft.', ['gluten']]] },
+  { like: /hot ?pot|stew|casserole|soup|gravy/, from: 'hotpot', steps: [
+    ['Hotpot with potato and carrot cooked very soft', 'Cooked long enough to mash with a fork.', []],
+    ['Hotpot with pumpkin cooked into the gravy', 'It melts into the gravy and thickens it.', []],
+    ['Hotpot with a few peas added at the end', 'A spoonful in their bowl.', []],
+    ['Hotpot with one new soft vegetable, like zucchini', 'Cut small and cooked soft.', []]] },
+  { like: /nugget|schnitzel|crumbed|chicken/, from: 'chicken nuggets', steps: [
+    ['Home-made crumbed chicken strips', 'Baked or air-fried, next to the usual ones.', ['gluten', 'meat', 'poultry', 'animal']],
+    ['Crumbed chicken with mashed potato and pumpkin', 'Half potato, half pumpkin in the mash.', ['gluten', 'meat', 'poultry', 'animal']],
+    ['Crumbed zucchini sticks', 'Crumbed and baked the same way, one or two beside the chicken.', ['gluten']],
+    ['Crumbed chicken with steamed peas', 'A spoonful of peas on the side.', ['gluten', 'meat', 'poultry', 'animal']]] },
+  { like: /yoghurt|yogurt|milk|custard|ice cream/, from: 'yoghurt', steps: [
+    ['Yoghurt with a little mashed banana stirred in', 'Mashed smooth, a teaspoon to start.', ['milk', 'lactose', 'animal']],
+    ['Yoghurt with blended berries', 'Blended smooth and swirled in.', ['milk', 'lactose', 'animal']],
+    ['A banana and berry smoothie', 'A small glass, made with milk.', ['milk', 'lactose', 'animal']],
+    ['Yoghurt with a few whole berries on top', 'To pick off and try.', ['milk', 'lactose', 'animal']]] },
+  { like: /toast|bread|sandwich|croissant|cereal|weet/, from: 'toast', steps: [
+    ['Toast with mashed banana', 'Spread thin, like a jam.', ['gluten']],
+    ['Fruit bread, toasted', 'A slice in place of the usual toast.', ['gluten']],
+    ['Toast with thin slices of strawberry or banana', 'A few slices on one half.', ['gluten']],
+    ['Toast with mashed avocado', 'A thin scrape on one corner to start.', ['gluten']]] },
+  { like: /pizza|cheese|meat|mince|sausage|burger|rice/, from: 'bolognese or mince', steps: [
+    ['Mince or bolognese with finely grated carrot cooked in', 'Grated fine and cooked until it disappears.', ['meat', 'animal']],
+    ['The same with grated zucchini as well', 'Peeled first if green bits put them off.', ['meat', 'animal']],
+    ['The same with a tin of lentils in place of some of the mince', 'About a quarter lentils to start.', ['meat', 'animal']],
+    ['The same with a few soft vegetables left in small pieces', 'Small pieces of the same vegetables they have been eating grated.', ['meat', 'animal']]] },
+];
+
+// One small new food a week for someone who isn't keen on vegetables or fruit (and hasn't chosen
+// to keep to what they eat now): [{week, food, from, how}]. Steps follow on from a food they like.
+// Foods they've already said they liked are skipped, so the next plan carries on from there.
+function smallSteps(r, p) {
+  if (!(r.gentleVeg || r.gentleFruit) || r.pace === 'own') return [];
+  const a = p.answers || {};
+  const likes = [a.likes, a.safe_foods, a.usual_day].map(x => String(x || '').toLowerCase()).join(' ');
+  // Chains that start from something they like come first, then the rest, so there's always a next step.
+  const chains = CHAINS.filter(c => c.like.test(likes)).concat(CHAINS.filter(c => !c.like.test(likes)));
+  const ok = ([food, , tags]) => !tags.some(t => r.hard.has(t) || r.diet.has(t))
+    && !r.avoidWords.some(w => w && food.toLowerCase().includes(w)) && r.tried[food] !== 'liked';
+  // Take turns between the chains (one step from each in order), so the weeks vary.
+  const queue = [];
+  for (let depth = 0; depth < 4; depth++) {
+    for (const c of chains) if (c.steps[depth] && ok(c.steps[depth])) queue.push({ food: c.steps[depth][0], from: c.from, how: c.steps[depth][1] });
+  }
+  // Mostly stay with the first two chains: early steps from those, before later chains' first steps.
+  const mine = chains.slice(0, 2).map(c => c.from);
+  queue.sort((x, y) => (mine.includes(y.from) ? 1 : 0) - (mine.includes(x.from) ? 1 : 0));
+  return queue.slice(0, 4).map((step, i) => Object.assign({ week: i + 1 }, step));
+}
+
 // The person's guide paragraph and tips.
 function guideFor(r, p) {
   const bits = [];
   if (r.kid) bits.push('Child-sized serves (about ' + Math.round(r.portion * 100) + '% of an adult serve). Children aren’t put on diets: regular meals and plenty of play is the goal.');
   else if (Math.abs(r.portion - 1) >= 0.05) bits.push('Serves are about ' + Math.round(Math.abs(r.portion - 1) * 100) + '% ' + (r.portion > 1 ? 'bigger' : 'smaller') + ' than average, worked out from your age, size, activity and goal.');
   else bits.push('Serves are about average for your age, size, activity and goal.');
+  if (!r.kid && p.measured && p.measured.weight) bits.push('This uses your latest logged weight (' + p.measured.weight + ' kg on ' + p.measured.weightDate + ').');
   const left = [...r.hard].map(t => ALLERGY_WORDS[t] || t);
   if (left.length) bits.push('Your meals leave out ' + left.join(', ') + '. Check labels too.');
   if (r.diet.has('meat') && r.diet.has('animal')) bits.push('All your meals are vegan.');
@@ -1023,16 +1342,31 @@ function guideFor(r, p) {
   if (r.conditions.has('Coeliac disease')) tips.push('You said you have coeliac disease: check every label for gluten, including sauces and stock.');
   if (r.conditions.has('Reflux')) tips.push('You mentioned reflux: smaller dinners earlier in the evening may help.');
   if (r.conditions.has('Irritable bowel (IBS)')) tips.push('You mentioned IBS: if some foods (like onion, garlic or beans) bother you, add them to “Foods you won’t eat” in About me and rebuild the plan.');
+  const serves = 'about ' + r.target.veg + ' serves of vegetables and ' + r.target.fruit + ' of fruit a day, the guideline amounts for your age';
+  const aServe = ' A serve is about half a cup of cooked vegetables or a medium piece of fruit. What your GP or dietitian says comes first.';
+  if (r.pace === 'full') tips.push('This plan aims for ' + serves + '.' + aServe);
+  else if (r.pace === 'build') tips.push('You chose to build up over the 4 weeks, so weeks 1 and 2 start part of the way and weeks 3 and 4 aim for ' + serves + '.' + aServe);
+  else tips.push('You chose to keep close to what you eat now, so nothing has been added to reach the guideline amounts (' + serves + '). The Macros tab shows how your week compares, and you can change this in About me and draft the plan again.');
+  if (r.pace !== 'own' && (r.gentleVeg || r.gentleFruit)) {
+    const what = r.gentleVeg && r.gentleFruit ? 'vegetables and fruit aren’t' : r.gentleVeg ? 'most vegetables aren’t' : 'fruit isn’t';
+    tips.push('You said ' + what + ' a favourite, so where possible they come cooked into meals, soft or blended. Starting with small amounts and building up may be easier, and a GP or dietitian can suggest what suits.');
+  }
+  if (smallSteps(r, p).length) tips.push('Small steps: each week has one new food to try, a short step on from something you already like. A taste is enough, and there’s no need to finish it. Tick how it went and the next plan carries on from there. A GP, dietitian or feeding therapist can suggest more.');
   tips.push('Drink water through the day.');
   return { guide: bits.join(' '), tips };
 }
 
 // The shopping lists: what each meal week needs, in whole packs. Pantry and freezer things go on
 // the stock-up list before each fortnight. Leftover pack amounts carry over while they keep.
-function shoppingFor(needs) {
+// Also returns "useUp": for each meal week, the fresh food likely to be left at the end of it.
+// `inKitchen` is the food the family already has ({key: [{amount, until}]}, from kitchenStock):
+// it is used up before anything is bought.
+function shoppingFor(needs, inKitchen) {
   const weekly = needs.map(() => ({}));
   const stock = [{}, {}];
   const onHand = {};   // key -> [{amount, until (week index)}]
+  for (const [k, shelf] of Object.entries(inKitchen || {})) onHand[k] = shelf.map(x => ({ amount: x.amount, until: x.until }));
+  const useUp = [];    // per meal week: fresh food likely to be left at the end of it
   const bought = needs.map(() => ({}));
   const stockBought = [{}, {}];
   needs.forEach((need, w) => {
@@ -1057,6 +1391,17 @@ function shoppingFor(needs) {
       if (longLife) stockBought[w < 2 ? 0 : 1][k] = (stockBought[w < 2 ? 0 : 1][k] || 0) + packs;
       else bought[w][k] = (bought[w][k] || 0) + packs;
     }
+    // "Use it up": fresh food that won't keep into next week and still has a fair bit left
+    // (a third of a pack or more), biggest share first.
+    const left = [];
+    for (const [k, shelf] of Object.entries(onHand)) {
+      const ing = ING[k];
+      if (ing.aisle === 'pantry' || ing.aisle === 'frozen') continue;
+      const amount = shelf.filter(x => x.until === w).reduce((n, x) => n + x.amount, 0);
+      const share = amount / ing.pack;
+      if (share >= 0.33) left.push({ share, text: (share >= 0.7 ? 'most of the ' : share >= 0.45 ? 'about half of the ' : 'about a third of the ') + ing.name.replace(/ × \d+$/, '') });
+    }
+    useUp.push(left.sort((a, b) => b.share - a.share).slice(0, 6).map(x => x.text));
   });
   const toList = counts => {
     const out = {};
@@ -1070,7 +1415,7 @@ function shoppingFor(needs) {
     for (const s of Object.values(SECTION)) if (out[s]) ordered[s] = out[s].sort((a, b) => a[0].localeCompare(b[0]));
     return ordered;
   };
-  return { weekly: bought.map(toList), stock: stockBought.map(toList) };
+  return { weekly: bought.map(toList), stock: stockBought.map(toList), useUp };
 }
 
 // Gives the builder its data where require() isn't available (the phone app):
@@ -1083,7 +1428,7 @@ function useData(data) {
 }
 
 const PlanBuilder = {
-  build, rulesFor, portionFor, allowed, exerciseFits, useData,
+  build, rulesFor, portionFor, allowed, exerciseFits, useData, kitchenStock,
   get EXERCISES() { return EXERCISES; },
   get LIB() { return LIB; },
 };

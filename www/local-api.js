@@ -30,6 +30,8 @@
       exLog: [],           // exercise sessions ticked
       measurements: [],    // [{id, person, date, kind, value, source}]
       settings: { appearance: {}, stores: [], energy: "", pins: {} },
+      kitchen: [],         // food already at home, as the lines typed on Family and plan
+      steps: {},           // person -> {"food they were offered": "tried" | "liked" | "not yet"}
       nextId: 1,
     };
   }
@@ -114,19 +116,76 @@
   // The plan builder (planbuilder.js, the same file as the web version), loaded in its own scope
   // the first time it's needed, so its names can't clash with the page's. It gets its data files
   // (meals, exercises, local prices) from here, as the phone has no require().
+  // It is given the health targets (healthtargets.js, also the web version's file) as
+  // window.HealthTargets, which is where it looks for them when there is no require().
   var BUILDER = null;
+  var TARGETS = null;   // the vegetable and fruit serves to aim for, and how a plan measures up
   function builder() {
     if (BUILDER) return Promise.resolve(BUILDER);
     return Promise.all([
       realFetch("planbuilder.js").then(function (r) { return r.text(); }),
       json("library.json"), json("exercises.json"), json("library-prices.json"),
+      realFetch("healthtargets.js").then(function (r) { return r.text(); }),
     ]).then(function (got) {
+      var targets = { exports: {} };
+      new Function("module", got[4])(targets);
+      TARGETS = targets.exports;
       var mod = { exports: {} };
-      new Function("module", "window", got[0])(mod, {});
+      new Function("module", "window", got[0])(mod, { HealthTargets: TARGETS });
       mod.exports.useData({ library: got[1], exercises: got[2], prices: got[3] });
       BUILDER = mod.exports;
       return BUILDER;
     });
+  }
+
+  // One person's feedback on meals from earlier plans (the same as the web's planextras.js):
+  //   {rated: {"lower-case dish name": average score out of 10}, notes: [{dish, note}]}.
+  function feedbackFor(person) {
+    var byDish = {};
+    store.mealLog.filter(function (r) { return r.person === person && r.dish && (r.score != null || r.note); })
+      .sort(function (a, b) { return (b.updated_at || 0) - (a.updated_at || 0); }).slice(0, 500)
+      .forEach(function (r) {
+        var d = byDish[r.dish.toLowerCase()] || (byDish[r.dish.toLowerCase()] = { dish: r.dish, scores: [], notes: [] });
+        if (r.score != null) d.scores.push(r.score);
+        if (r.note) d.notes.push(r.note);
+      });
+    var rated = {}, notes = [];
+    Object.keys(byDish).forEach(function (key) {
+      var d = byDish[key];
+      if (d.scores.length) rated[key] = Math.round(d.scores.reduce(function (n, x) { return n + x; }, 0) / d.scores.length * 10) / 10;
+      d.notes.forEach(function (note) { if (notes.length < 20) notes.push({ dish: d.dish, note: note.slice(0, 200) }); });
+    });
+    return { rated: rated, notes: notes };
+  }
+
+  // What the family thought of meals they've rated: {"lower-case dish name": average out of 10}.
+  function dishRatings() {
+    var scores = {};
+    store.mealLog.forEach(function (r) {
+      if (!r.dish || r.score == null) return;
+      (scores[r.dish.toLowerCase()] = scores[r.dish.toLowerCase()] || []).push(r.score);
+    });
+    var rated = {};
+    Object.keys(scores).forEach(function (k) { rated[k] = scores[k].reduce(function (n, x) { return n + x; }, 0) / scores[k].length; });
+    return rated;
+  }
+
+  // The latest weight someone logged in the last 8 weeks, for the plan builder: {weight,
+  // weightDate}, or null. (The web version also has steps and food from Health sync; the app
+  // only has weights so far.)
+  function measuredFor(person) {
+    var since = new Date(Date.now() - 56 * 86400000).toISOString().slice(0, 10);
+    var weights = store.measurements.filter(function (m) { return m.person === person && m.kind === "weight" && m.date >= since; })
+      .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    if (!weights.length) return null;
+    var last = weights[weights.length - 1];
+    return { weight: Math.round(last.value * 10) / 10, weightDate: last.date };
+  }
+
+  // One person's small-steps record: {"food they were offered": "tried" | "liked" | "not yet"}.
+  function triedFor(person) {
+    var saved = store.steps && store.steps[person];
+    return isObj(saved) ? saved : {};
   }
 
   // The household with each person's answers, in the shape the plan builder expects.
@@ -142,6 +201,10 @@
         updated: profile ? profile.updated_at : null,
         answers: answers,
         avoid: avoidList(person),
+        // What they said about earlier meals, the weight they logged, and the small steps they tried.
+        feedback: feedbackFor(person),
+        measured: measuredFor(person),
+        tried: triedFor(person),
       };
     });
   }
@@ -462,19 +525,32 @@
     }
   }
 
+  // What Family and plan shows about a waiting draft: every day's meals, the cost, and for each
+  // person their snacks, tips, small steps and how their vegetables and fruit measure up.
   function draftPreview(d) {
     var plan = d.plan || {};
+    var strings = function (list) { return Array.isArray(list) ? list.filter(function (t) { return typeof t === "string"; }) : []; };
+    // How each person's days measure against their vegetable and fruit serves (healthtargets.js).
+    var health = TARGETS ? TARGETS.review(plan, household()) : [];
     return {
       id: d.id, title: d.title, details: d.notes || null, created_at: d.created_at, user: "this phone", currency: plan.currency || "AUD",
       weeks: (plan.weeks || []).map(function (w) {
-        return { name: w.name, kind: w.kind || null, cost: w.cost, dinners: (w.meals || []).map(function (m) { return m.day + ": " + m.dinner; }) };
+        return { name: w.name, kind: w.kind || null, cost: w.cost,
+          dinners: (w.meals || []).map(function (m) { return m.day + ": " + m.dinner; }),
+          meals: (w.meals || []).map(function (m) { return { day: m.day, breakfast: m.breakfast || "", lunch: m.lunch || "", dinner: m.dinner || "" }; }),
+          useUp: Array.isArray(w.useUp) ? w.useUp.slice(0, 20) : [] };
       }),
       people: Object.keys(plan.people || {}).filter(function (k) { return plan.people[k] && plan.people[k].name; }).map(function (key) {
         var p = plan.people[key];
         var focus = (plan.weeks || []).filter(function (w) { return w.exercise; })
           .map(function (w) { return w.exercise[key] && w.exercise[key].focus; }).filter(Boolean)[0] || null;
         return { key: key, name: p.name, portion: p.portion, focus: focus,
-          snacks: (p.snacks || []).map(function (s) { return (s.when ? s.when + ": " : "") + s.what; }) };
+          health: health.filter(function (h) { return h.key === key; })[0] || null,
+          snacks: (p.snacks || []).map(function (s) { return (s.when ? s.when + ": " : "") + s.what; }),
+          guide: typeof p.guide === "string" ? p.guide : "",
+          tips: strings(p.tips),
+          steps: Array.isArray(p.steps) ? p.steps.filter(function (x) { return x && x.food; }).map(function (x) { return "Week " + x.week + ": " + x.food + (x.from ? " (from " + x.from + ")" : ""); }) : [],
+          medical: plan.exercise && plan.exercise[key] ? strings(plan.exercise[key].medical) : [] };
       }),
     };
   }
@@ -627,13 +703,16 @@
     }
     if (path === "/api/plan/setup" && method === "GET") {
       if (!QUESTIONS) return questions().then(function () { return route(method, path, q, b); });
+      // The preview of a waiting draft measures it with the health targets, so load them first.
+      if (store.draft && !TARGETS) return builder().then(function () { return route(method, path, q, b); });
       return {
-        people: household().map(function (p) { var c = Object.assign({}, p); delete c.answers; return c; }),
+        people: household().map(function (p) { var c = Object.assign({}, p); delete c.answers; delete c.feedback; delete c.measured; delete c.tried; return c; }),
         questions: QUESTIONS ? QUESTIONS.sections.reduce(function (n, s) { return n + s.questions.length; }, 0) : 0,
         claude: { enabled: false, own: false, reason: "AI isn’t in this version of the app yet.", name: null, provider: null, model: null },
         ai: { family: { provider: "none" }, keys: { anthropic: false, openai: false, gemini: false, ollama: false }, providers: {} },
         job: null,
         draft: store.draft ? draftPreview(store.draft) : null,
+        kitchen: store.kitchen || [],
         isExample: !store.plan,
       };
     }
@@ -641,11 +720,46 @@
       if (!store.people.length) fail(400, "Add the people in your family first.");
       return builder().then(function (pb) {
         var people = household();
-        var built = pb.build(people, { seed: Date.now(), country: country(), locale: region().locale });
+        var built = pb.build(people, { seed: Date.now(), country: country(), locale: region().locale, pantry: store.kitchen || [], rated: dishRatings() });
+        var notes = built.notesForAdmin;
         store.draft = { id: newId(), title: "New 4-week plan for the family", created_at: Date.now(),
-          plan: built.plan, notes: (built.notesForAdmin || []).join("\n") || null };
+          plan: built.plan, notes: (Array.isArray(notes) ? notes.join(" ") : notes) || null };
         return { ok: true, done: true };
       });
+    }
+    // The kitchen list: food already at home, one thing per line. The next plan uses it first.
+    if (path === "/api/plan/kitchen" && method === "PUT") {
+      if (!Array.isArray(b.items)) fail(400, "bad request");
+      var items = b.items.filter(function (x) { return typeof x === "string"; })
+        .map(function (x) { return x.replace(/[<>]/g, "").trim().slice(0, 80); }).filter(Boolean).slice(0, 200);
+      store.kitchen = items;
+      // Say what the plan builder understands, so they can reword anything it missed.
+      return builder().then(function (pb) {
+        var read = pb.kitchenStock(items);
+        return { ok: true, kitchen: items, counted: read.counted, unknown: read.unknown };
+      });
+    }
+    // Small steps: how a new food went for someone ("tried", "liked", "not yet", or "" to clear it).
+    if (path === "/api/steps") {
+      if (personKeys().indexOf(person) < 0) fail(404, "unknown person");
+      if (method === "GET") return { person: person, tried: triedFor(person) };
+      if (method === "PUT") {
+        var food = String(b.food || "").trim().slice(0, 120);
+        var result = String(b.result || "");
+        if (!food || (result && ["tried", "liked", "not yet"].indexOf(result) < 0)) fail(400, "bad request");
+        var tried = Object.assign({}, triedFor(person));
+        if (result) tried[food] = result; else delete tried[food];
+        // Keep the newest 200, so the record can't grow forever.
+        var kept = {};
+        Object.keys(tried).slice(-200).forEach(function (k) { kept[k] = tried[k]; });
+        store.steps = store.steps || {};
+        store.steps[person] = kept;
+        return { ok: true, tried: kept };
+      }
+    }
+    // The Today page asks this to show "A new plan is waiting" when there is a draft.
+    if (path === "/api/requests" && method === "GET") {
+      return { requests: store.draft ? [{ id: store.draft.id, status: "open", kind: "full-plan", title: store.draft.title }] : [] };
     }
     var rm = path.match(/^\/api\/requests\/(\d+)\/(approve|decline)$/);
     if (rm && method === "POST") {

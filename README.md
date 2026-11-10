@@ -27,7 +27,7 @@ It's a planning tool, not medical advice. The app asks people to check their pla
 
 - [Capacitor](https://capacitorjs.com) 8 wraps the web pages in `www/` as native iOS and Android apps.
 - The pages were written for the self-hosted server and call addresses like `/api/state`. In the app, `www/local-api.js` answers those calls on the phone and keeps everything in one JSON file in the app's private storage.
-- These files are copied unchanged from the web version, so fixes there can be copied straight across: the plan builder (`planbuilder.js`), its data (`library.json`, `library-prices.json`, `exercises.json`), the countries and stores (`regions.js`), the guidelines, the About me questions and the fonts. `tools/build_library.py` rebuilds the meal library.
+- These files are copied unchanged from the web version, so fixes there can be copied straight across: the plan builder (`planbuilder.js`), the vegetable and fruit targets it aims for (`healthtargets.js`), its data (`library.json`, `library-prices.json`, `exercises.json`), the countries and stores (`regions.js`), the guidelines and the fonts. The About me questions are the web version's without the blood test question (the app has no file uploads), and `library.json` also carries the web's shared-library dishes and snacks. `tools/build_library.py` rebuilds the meal library.
 - The pages (`index.html`, `settings.html` and so on) are the web version's with small changes for the app: no logins, AI or Health sync, a Backup section in Settings, and "Family and plan" instead of Plan setup.
 - The fonts are bundled in `www/fonts/`, so nothing is loaded from the internet.
 
