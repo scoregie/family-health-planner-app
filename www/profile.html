@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+  About me: the questions each person answers so the plan can suit them.
+  How this file is laid out: the style section at the top sets the look, the body is the
+  layout, and the script section near the end makes it work (asking the server for data with
+  fetch() and drawing it). docs/how-it-works.md explains how the pages and the server fit together.
+-->
 <html lang="en-AU">
 <head>
 <script src="local-api.js"></script>
@@ -8,7 +14,7 @@
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121214">
 <link rel="icon" type="image/png" href="icon-192.png">
 <title>About me</title>
-<link rel="stylesheet" href="fonts.css">
+<link href="fonts/fonts.css" rel="stylesheet">
 <style>
 :root{--low:#b3261e;--bg:#f5f5f4;--card:#fff;--ink:#1a1a1c;--mute:#5e5e63;--line:#dddcd9;--accent:#0e6b57;--on-accent:#fff;--chip:#e3f1ec}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--low:#ff8a80;--bg:#121214;--card:#1c1c1f;--ink:#ececee;--mute:#a3a3a8;--line:#2f2f33;--accent:#52c7a8;--on-accent:#05221a;--chip:#1d3a31;color-scheme:dark}}
@@ -63,6 +69,7 @@ textarea{width:100%;min-height:4.2rem;resize:vertical}
 .privacy{color:var(--mute);font-size:.85rem;margin:1.2rem 0 0}
 [hidden]{display:none!important}
 </style>
+<script src="regions.js"></script>
 <script src="appearance.js"></script>
 </head>
 <body>
@@ -91,7 +98,7 @@ textarea{width:100%;min-height:4.2rem;resize:vertical}
         <div id="pwMsg" role="status"></div>
       </form>
     </section>
-    <p class="privacy">Only you and the plan’s admins can see these answers. Health advice from your doctor always comes first.</p>
+    <p class="privacy">Only you and the plan’s admins can see these answers. If your family has chosen an AI on Plan setup, they’re also sent to that AI company to write the plan and answer Ask AI; with No AI they stay on your server. The plan offers general considerations only: your GP, dietitian or physio knows your situation best.</p>
   </div>
 </main>
 <div class="status" id="status" role="status" hidden></div>
@@ -256,7 +263,12 @@ function questionField(q) {
     };
     // Money goes before the number, other units after it.
     if (q.unit === "$") {
-      var money = el("span", null, "$ ");
+      // The household's currency symbol: "$", "£", "€", "¥"...
+      var symbol = "$";
+      try {
+        new Intl.NumberFormat(Appearance.locale(), { style: "currency", currency: Appearance.region().currency }).formatToParts(0).forEach(function (part) { if (part.type === "currency") symbol = part.value; });
+      } catch (e) { /* keep "$" */ }
+      var money = el("span", null, symbol + " ");
       wrap.appendChild(money);
       wrap.appendChild(number);
     } else {
@@ -300,6 +312,7 @@ function render() {
 
 // ---------- Reminders (for people who said reminders would help) ----------
 var reminderEl = null;
+// The box that suggests turning on reminders (filled in by updateReminders).
 function reminderBox() {
   reminderEl = el("div", "remind");
   reminderEl.hidden = true;
@@ -311,10 +324,11 @@ var PLAN_PEOPLE = null;
 function planKeyFor(person) {
   var people = (PLAN_PEOPLE || {});
   return Object.keys(people).filter(function (k) {
-    return people[k] && people[k].name && String(people[k].name).toLowerCase().replace(/[^a-z0-9]+/g, "-") === person;
+    return people[k] && people[k].name && Appearance.personKey(people[k].name) === person;
   })[0] || null;
 }
 
+// Shows or hides the reminders suggestion, depending on the reminders answer.
 function updateReminders() {
   if (!reminderEl) return;
   var answer = ANSWERS.reminders || "";
@@ -358,6 +372,7 @@ function load(names) {
 
 // "I'm finished": tells the family's admins these answers are ready for drafting the plan.
 var FINISHED = false;
+// Shows the "I'm finished" card once enough questions are answered.
 function showFinish() {
   var mine = PERSON === ME.person;
   var name = mine ? "you" : $("sub").textContent.replace(/’s answers$/, "");

@@ -81,8 +81,15 @@
   // Helpers
   // ---------------------------------------------------------------------------
 
+  // A person's key from their name: "Alex Smith" becomes "alex-smith". A name with no a-z or 0-9
+  // (like "ゆき") gets "p-" and a short code made from it. The same as the web version's toKey.
   function toKey(name) {
-    return String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    var key = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    if (/[a-z0-9]/.test(key) || !/[\p{L}\p{N}]/u.test(String(name || ""))) return key;
+    var h = 0x811c9dc5;
+    var s = String(name).trim();
+    for (var i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
+    return "p-" + ("0000000" + h.toString(16)).slice(-8);
   }
   function isObj(v) {
     return v && typeof v === "object" && !Array.isArray(v);
@@ -99,20 +106,24 @@
     if (QUESTIONS) return Promise.resolve(QUESTIONS);
     return realFetch("questions.json").then(function (r) { return r.json(); }).then(function (q) { QUESTIONS = q; return q; });
   }
-  var LIBRARY = null;
-  function library() {
-    if (LIBRARY) return Promise.resolve(LIBRARY);
-    return realFetch("library.json").then(function (r) { return r.json(); }).then(function (l) { LIBRARY = l; return l; });
+  // Reads one of the app's own JSON files (library.json and so on).
+  function json(file) {
+    return realFetch(file).then(function (r) { return r.json(); });
   }
 
-  // The plan builder (planbuilder.js), loaded in its own scope only when a plan is drafted, so its
-  // names can't clash with the page's.
+  // The plan builder (planbuilder.js, the same file as the web version), loaded in its own scope
+  // the first time it's needed, so its names can't clash with the page's. It gets its data files
+  // (meals, exercises, local prices) from here, as the phone has no require().
   var BUILDER = null;
   function builder() {
     if (BUILDER) return Promise.resolve(BUILDER);
-    return realFetch("planbuilder.js").then(function (r) { return r.text(); }).then(function (code) {
+    return Promise.all([
+      realFetch("planbuilder.js").then(function (r) { return r.text(); }),
+      json("library.json"), json("exercises.json"), json("library-prices.json"),
+    ]).then(function (got) {
       var mod = { exports: {} };
-      new Function("module", "window", code)(mod, {});
+      new Function("module", "window", got[0])(mod, {});
+      mod.exports.useData({ library: got[1], exercises: got[2], prices: got[3] });
       BUILDER = mod.exports;
       return BUILDER;
     });
@@ -130,6 +141,7 @@
         finished: !!(profile && profile.finished_at),
         updated: profile ? profile.updated_at : null,
         answers: answers,
+        avoid: avoidList(person),
       };
     });
   }
@@ -377,6 +389,57 @@
   }
 
   // ---------------------------------------------------------------------------
+  // The exercise library: leaving exercises out, and swapping one in the plan
+  // ---------------------------------------------------------------------------
+
+  // The exercises a person asked to leave out of future plans (exercise ids).
+  function avoidList(person) {
+    var all = store.settings.avoid || {};
+    return Array.isArray(all[person]) ? all[person] : [];
+  }
+  // Adds an exercise to someone's leave-out list (on = true) or takes it off. Returns the new list.
+  function setAvoid(person, id, on) {
+    var list = avoidList(person).filter(function (x) { return x !== id; });
+    if (on) list.push(id);
+    store.settings.avoid = Object.assign({}, store.settings.avoid);
+    store.settings.avoid[person] = list;
+    return list;
+  }
+  // The library exercise a workout line is about ("Warm-up: March on the spot (5 minutes): ..."), or null.
+  function matchExercise(exercises, line) {
+    var name = String(line || "").replace(/^(warm-up|cool-down)\s*:\s*/i, "").split(/\s*[(:]/)[0].trim().toLowerCase();
+    if (!name) return null;
+    return exercises.filter(function (e) { return e.name.toLowerCase() === name; })[0]
+      || exercises.filter(function (e) { return name.indexOf(e.name.toLowerCase()) === 0 || e.name.toLowerCase().indexOf(name) === 0; })[0] || null;
+  }
+  // Swaps line `item` of one of a person's workouts for exercise `to` (the web's POST /api/exercises/swap).
+  function swapExercise(person, b, pb) {
+    var exercises = pb.EXERCISES;
+    var to = exercises.filter(function (e) { return e.id === b.to; })[0];
+    if (!to) fail(400, "unknown exercise");
+    var plan = store.plan;
+    var ex = plan && plan.exercise;
+    if (!ex) fail(404, "The plan has no exercise section.");
+    var target = Array.isArray(ex.workouts) ? ex : ex[planKeyFor(plan, person)];
+    var workout = target && Array.isArray(target.workouts) ? target.workouts.filter(function (w) { return w && w.name === b.workout; })[0] : null;
+    var index = Number(b.item);
+    if (!workout || !Array.isArray(workout.items) || !Number.isInteger(index) || index < 0 || index >= workout.items.length) {
+      fail(409, "That workout has changed. Go back and try again.");
+    }
+    var old = matchExercise(exercises, workout.items[index]);
+    if (!old) fail(400, "That line isn’t an exercise from the library, so it can’t be swapped here.");
+    var near = { lunge: "squat", squat: "lunge" };
+    if (old.type !== to.type && near[old.type] !== to.type) fail(400, "Pick an exercise of the same kind.");
+    var profile = store.profiles[person];
+    var fits = pb.exerciseFits({ answers: (profile && profile.answers) || {}, avoid: avoidList(person) });
+    if (fits.indexOf(to.id) < 0) fail(400, "That exercise doesn’t suit their About me answers (equipment, injuries or health), or it’s on their leave-out list. Pick another.");
+    var start = (/^(warm-up|cool-down)\s*:\s*/i.exec(workout.items[index]) || [""])[0];
+    workout.items[index] = start + to.name + " (" + to.dose + "): " + to.how;
+    if (b.avoid && old.id !== to.id) setAvoid(person, old.id, true);
+    return { ok: true, line: workout.items[index] };
+  }
+
+  // ---------------------------------------------------------------------------
   // Plans
   // ---------------------------------------------------------------------------
 
@@ -402,7 +465,7 @@
   function draftPreview(d) {
     var plan = d.plan || {};
     return {
-      id: d.id, title: d.title, details: d.notes || null, created_at: d.created_at, user: "this phone",
+      id: d.id, title: d.title, details: d.notes || null, created_at: d.created_at, user: "this phone", currency: plan.currency || "AUD",
       weeks: (plan.weeks || []).map(function (w) {
         return { name: w.name, kind: w.kind || null, cost: w.cost, dinners: (w.meals || []).map(function (m) { return m.day + ": " + m.dinner; }) };
       }),
@@ -427,23 +490,36 @@
     return { user: "this phone", person: firstPerson(), admin: true, role: "owner", device: true };
   }
 
+  // The countries and stores (regions.js, which every page loads).
+  function regions() { return window.REGIONS || { countries: {}, stores: {}, order: [] }; }
+  // The phone's country: the one chosen in Family and plan, else Australia.
+  function country() {
+    var c = store.settings.country;
+    return regions().countries[c] ? c : "au";
+  }
+  function region() { return regions().countries[country()] || { stores: [], locale: "en-AU" }; }
+
   function appearance() {
     var s = store.settings;
     // One phone, one set of choices: kept as "mine", with no separate household layer.
     return { house: s.appearance || {}, admin: false, stores: { mine: s.stores || [], house: [] },
-      energy: { mine: s.energy || "", house: "" }, pins: s.pins || {} };
+      energy: { mine: s.energy || "", house: "" }, pins: s.pins || {}, country: country() };
   }
 
-  var PIN_HOSTS = { coles: "www.coles.com.au", woolworths: "www.woolworths.com.au", iga: "www.igashop.com.au",
-    foodland: "www.foodlandsa.com.au", spudshed: "www.spudshed.com.au", drakes: "www.drakes.com.au" };
-  var STORES = ["coles", "woolworths", "aldi", "iga", "foodland", "spudshed", "drakes"];
+  // The website a pinned product page has to be on, for each store that has one.
+  function pinHosts() {
+    var out = {};
+    var all = regions().stores;
+    Object.keys(all).forEach(function (k) { if (all[k].host) out[k] = all[k].host; });
+    return out;
+  }
   var CHOICES = { theme: ["auto", "light", "dark"], colour: ["green", "teal", "blue", "purple", "berry", "orange", "olive", "slate"],
     font: ["atkinson", "lexend", "nunito", "literata", "system"], size: ["small", "normal", "large", "larger", "largest"] };
 
   function cleanPin(store, link) {
     try {
       var u = new URL(String(link).trim());
-      var host = PIN_HOSTS[store];
+      var host = pinHosts()[store];
       if (u.protocol !== "https:" || (u.hostname !== host && u.hostname !== host.replace(/^www\./, ""))) return "";
       return u.href.slice(0, 500);
     } catch (e) { return ""; }
@@ -527,7 +603,7 @@
 
     if (path === "/api/family/person" && method === "POST") {
       var name = String(b.name || "").trim().slice(0, 40);
-      if (!/[A-Za-z0-9]/.test(name)) fail(400, "Enter a name with at least one letter or number.");
+      if (!/[\p{L}\p{N}]/u.test(name)) fail(400, "Enter a name with at least one letter or number.");
       if (personKeys().indexOf(toKey(name)) > -1) fail(400, "There’s already someone called " + name + ".");
       if (store.people.length >= 12) fail(400, "That’s the most people one plan can hold.");
       var portion = Math.min(2.5, Math.max(0.3, Number(b.portion) || 1));
@@ -563,9 +639,9 @@
     }
     if (path === "/api/plan/draft" && method === "POST") {
       if (!store.people.length) fail(400, "Add the people in your family first.");
-      return Promise.all([library(), builder()]).then(function (got) {
+      return builder().then(function (pb) {
         var people = household();
-        var built = got[1].build(people, { seed: Date.now(), library: got[0] });
+        var built = pb.build(people, { seed: Date.now(), country: country(), locale: region().locale });
         store.draft = { id: newId(), title: "New 4-week plan for the family", created_at: Date.now(),
           plan: built.plan, notes: (built.notesForAdmin || []).join("\n") || null };
         return { ok: true, done: true };
@@ -587,8 +663,35 @@
       return { ok: true, house: choice };
     }
     if (path === "/api/appearance/stores" && method === "PUT") {
-      store.settings.stores = Array.isArray(b.stores) ? b.stores.filter(function (s, i) { return STORES.indexOf(s) > -1 && b.stores.indexOf(s) === i; }) : [];
+      var here = region().stores;
+      store.settings.stores = Array.isArray(b.stores) ? b.stores.filter(function (s, i) { return here.indexOf(s) > -1 && b.stores.indexOf(s) === i; }) : [];
       return { ok: true, stores: appearance().stores };
+    }
+    if (path === "/api/appearance/country" && method === "PUT") {
+      if (!regions().countries[b.country]) fail(400, "Unknown country.");
+      store.settings.country = b.country;
+      // Stores chosen for the old country don't apply in the new one.
+      store.settings.stores = (store.settings.stores || []).filter(function (s) { return region().stores.indexOf(s) > -1; });
+      return { ok: true, country: country(), stores: appearance().stores, energy: appearance().energy };
+    }
+
+    if (path === "/api/exercises" && method === "GET") {
+      if (personKeys().indexOf(person) < 0) fail(404, "unknown person");
+      return builder().then(function (pb) {
+        var profile = store.profiles[person];
+        return { exercises: pb.EXERCISES, fits: pb.exerciseFits({ answers: (profile && profile.answers) || {}, avoid: [] }), avoid: avoidList(person) };
+      });
+    }
+    if (path === "/api/exercises/avoid" && method === "PUT") {
+      if (personKeys().indexOf(person) < 0) fail(404, "unknown person");
+      return builder().then(function (pb) {
+        if (!pb.EXERCISES.some(function (e) { return e.id === b.id; })) fail(400, "unknown exercise");
+        return { ok: true, avoid: setAvoid(person, b.id, !!b.avoid) };
+      });
+    }
+    if (path === "/api/exercises/swap" && method === "POST") {
+      if (personKeys().indexOf(person) < 0) fail(404, "unknown person");
+      return builder().then(function (pb) { return swapExercise(person, b, pb); });
     }
     if (path === "/api/appearance/energy" && method === "PUT") {
       store.settings.energy = b.energy === "kJ" || b.energy === "kcal" ? b.energy : "";
@@ -597,11 +700,11 @@
     if (path === "/api/appearance/pins" && method === "PUT") {
       var item = String(b.item || "").trim().toLowerCase().slice(0, 120);
       var where = String(b.store || "");
-      if (!item || !Object.prototype.hasOwnProperty.call(PIN_HOSTS, where) || ["__proto__", "constructor", "prototype"].indexOf(item) > -1) fail(400, "bad request");
+      if (!item || !Object.prototype.hasOwnProperty.call(pinHosts(), where) || ["__proto__", "constructor", "prototype"].indexOf(item) > -1) fail(400, "bad request");
       var pins = store.settings.pins;
       if (b.url) {
         var link = cleanPin(where, b.url);
-        if (!link) fail(400, "That doesn’t look like a product page on " + PIN_HOSTS[where] + ". Open the product there, copy its address, and paste it here.");
+        if (!link) fail(400, "That doesn’t look like a product page on " + pinHosts()[where] + ". Open the product there, copy its address, and paste it here.");
         pins[item] = Object.assign({}, pins[item]);
         pins[item][where] = link;
       } else if (pins[item]) {
@@ -644,6 +747,7 @@
       return { ok: true };
     }
 
+    console.warn("This version of the app doesn’t answer " + method + " " + path);
     fail(404, "not found");
   }
 

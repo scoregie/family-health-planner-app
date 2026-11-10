@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+  Progress: week-by-week charts of weight, energy, steps and meals eaten.
+  How this file is laid out: the style section at the top sets the look, the body is the
+  layout, and the script section near the end makes it work (asking the server for data with
+  fetch() and drawing it). docs/how-it-works.md explains how the pages and the server fit together.
+-->
 <html lang="en-AU">
 <head>
 <script src="local-api.js"></script>
@@ -8,7 +14,7 @@
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121214">
 <link rel="icon" type="image/png" href="icon-192.png">
 <title>Progress</title>
-<link rel="stylesheet" href="fonts.css">
+<link href="fonts/fonts.css" rel="stylesheet">
 <style>
 /* Colours. Dark mode has its own chosen colours (not just the light ones flipped).
    --mark is the colour of every chart line and bar. Estimated bars use the same colour, hatched. */
@@ -75,6 +81,14 @@ input[type=number]{width:7rem}
 .weigh li{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.3rem 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
 /* Table view */
 details.table summary{cursor:pointer;font-weight:700}
+.hsync details>summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;gap:.2rem .6rem;align-items:baseline}
+.hsync details>summary::-webkit-details-marker{display:none}
+.hsync details>summary::after{content:"Show";margin-left:auto;color:var(--accent);font-weight:700;font-size:.85rem}
+.hsync details[open]>summary::after{content:"Hide"}
+.hsline{color:var(--mute);font-size:.88rem}
+.hsline.bad{color:var(--low)}
+#syncBody{margin-top:.6rem}
+.note.err{color:var(--low)}
 .scroll{overflow-x:auto;margin-top:.6rem}
 table{border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums;min-width:100%}
 th,td{padding:.3rem .5rem;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -89,6 +103,7 @@ th{color:var(--mute);font-weight:700}
 #app.loading{opacity:.55;transition:opacity .2s}
 [hidden]{display:none!important}
 </style>
+<script src="regions.js"></script>
 <script src="appearance.js"></script>
 </head>
 <body>
@@ -99,6 +114,13 @@ th{color:var(--mute);font-weight:700}
   </div>
   <div id="pmsg"></div>
   <div id="app" hidden>
+    <!-- Apple Health sync is for the web version; the app reads phone health data in a later version. -->
+    <section class="card hsync" hidden>
+      <details id="syncFold">
+        <summary><b>Apple Health sync</b> <span class="hsline" id="syncLine">Checking…</span></summary>
+        <div id="syncBody"></div>
+      </details>
+    </section>
     <div class="pseg" id="people" hidden role="group" aria-label="Whose progress"></div>
     <div class="filters">
       <span class="lab" id="rangeLab">Show</span>
@@ -127,7 +149,7 @@ th{color:var(--mute);font-weight:700}
       <h2>Where these numbers come from</h2>
       <p class="note" id="sources"></p>
     </section>
-    <p class="privacy">This is saved only on this phone. Weight goes up and down day to day, so look at the trend over a few weeks. Your doctor’s advice always comes first.</p>
+    <p class="privacy">This is saved only on this phone. Weight goes up and down day to day, so look at the trend over a few weeks. What your GP or dietitian tells you comes first.</p>
   </div>
 </main>
 <div class="status" id="status" role="status" hidden></div>
@@ -213,7 +235,7 @@ function weekName(start) {
 // A number with thousands separators and a fixed number of decimals: 12345.6 -> "12,346".
 function fmt(n, places) {
   if (n == null) return "–";
-  return Number(n).toLocaleString("en-AU", { minimumFractionDigits: places || 0, maximumFractionDigits: places || 0 });
+  return Number(n).toLocaleString(Appearance.locale(), { minimumFractionDigits: places || 0, maximumFractionDigits: places || 0 });
 }
 
 // ---------------------------------------------------------------------------
@@ -273,6 +295,7 @@ function chartCard(spec) {
   return card;
 }
 
+// Draws a line chart as an SVG picture (no chart library), with dots you can tap to see each value.
 function drawChart(box, spec) {
   box.textContent = "";
   var W = Math.max(260, Math.round(box.clientWidth || 600));
@@ -372,6 +395,7 @@ function drawChart(box, spec) {
   var tip = el("div", "tip");
   tip.hidden = true;
   var current = -1;
+  // Shows the value of point i in a little box next to it.
   function show(i) {
     if (i < 0 || i >= pts.length) return;
     current = i;
@@ -399,6 +423,7 @@ function drawChart(box, spec) {
     tip.style.left = Math.max(0, Math.min(box.clientWidth - tw, left - tw / 2)) + "px";
     tip.style.top = Math.max(-8, top - tip.offsetHeight - 10) + "px";
   }
+  // Hides that box again.
   function hide() {
     current = -1;
     tip.hidden = true;
@@ -460,6 +485,7 @@ window.addEventListener("resize", function () {
 function renderTiles(d) {
   var tiles = $("tiles");
   tiles.textContent = "";
+  // A summary tile: a label, a big number with its unit, and a small detail line.
   function tile(label, value, unit, detail) {
     var t = el("div", "tile");
     t.appendChild(el("div", "k", label));
@@ -516,7 +542,7 @@ function renderCharts(d) {
       var n = d.weighIns.filter(function (x) { return x.date >= w.week && x.date < addDays(w.week, 7); }).length;
       return { week: w.week, value: w.weight, extra: n ? n + (n === 1 ? " weigh-in" : " weigh-ins") : null };
     }),
-    empty: "No weigh-ins yet. Add one below, set up Health sync (at the bottom), or upload a Lose It or Apple Health export on the My files page.",
+    empty: "No weigh-ins yet. Add one below, set up Apple Health sync (at the top), or upload a Lose It or Apple Health export on the My files page.",
   };
   if (d.goalWeight) weightSpec.key = [{ cls: "dash", text: "Goal " + fmt(d.goalWeight, 1) + " kg (from About me)" }];
   charts.appendChild(chartCard(weightSpec));
@@ -602,7 +628,7 @@ function renderManual(d) {
 function renderSources(d) {
   var names = { "lose-it": "Lose It", "apple-health": "Apple Health" };
   var parts = (d.imported || []).filter(function (i) { return i.at; }).map(function (i) {
-    return names[i.source] + " (" + i.name + ", read " + new Date(i.at).toLocaleDateString("en-AU") + ")";
+    return names[i.source] + " (" + i.name + ", read " + new Date(i.at).toLocaleDateString(Appearance.locale()) + ")";
   });
   $("sources").textContent = "Weight: the weigh-ins you add here. Food: an estimate from the meals ticked in this app, using each dish’s macros and your portion size. Exercise sessions and meals: your ticks in this app.";
 }
@@ -610,6 +636,7 @@ function renderSources(d) {
 // Redraw in the new unit when kJ or kcal is changed in Settings.
 window.addEventListener("units-changed", function () { if (DATA) render(DATA); });
 
+// Draws the whole page from the server's numbers.
 function render(d) {
   DATA = d;
   var name = NAMES[PERSON] || PERSON;
@@ -619,6 +646,47 @@ function render(d) {
   renderTable(d);
   renderManual(d);
   renderSources(d);
+}
+
+// The Apple Health sync card at the top: a one-line status, and (opened) the details and the set-up link.
+var SYNCNAMES = { steps: "steps", active_energy: "Move", weight: "weight", energy_in: "food", protein_in: "protein", carbs_in: "carbs", fat_in: "fat" };
+// When the phone last sent numbers: "today, 7:05 am" or a date.
+function syncWhen(ms) {
+  var d = new Date(ms);
+  var today = new Date().toDateString() === d.toDateString();
+  return (today ? "today" : d.toLocaleDateString(Appearance.locale(), { weekday: "short", day: "numeric", month: "short" })) + ", " + d.toLocaleTimeString(Appearance.locale(), { hour: "numeric", minute: "2-digit" });
+}
+// The Health sync section: when the phone last sent numbers, and how to set it up.
+function renderSync() {
+  var fold = $("syncFold"), line = $("syncLine"), body = $("syncBody");
+  var who = PERSON && ME && PERSON !== ME.person ? "?person=" + encodeURIComponent(PERSON) : "";
+  if (!fold.dataset.wired) {
+    fold.dataset.wired = "1";
+    try { fold.open = localStorage.getItem("progress-sync-open") === "1"; } catch (e) {}
+    fold.addEventListener("toggle", function () {
+      try { localStorage.setItem("progress-sync-open", fold.open ? "1" : "0"); } catch (e) {}
+    });
+  }
+  api("GET", "/api/health/key" + who).then(function (k) {
+    body.textContent = "";
+    var last = k.last;
+    var stale = last && Date.now() - last.at > 2 * 86400000;
+    line.className = "hsline" + (!k.hasKey || stale || (last && last.skipped && last.skipped.length) ? " bad" : "");
+    line.textContent = !k.hasKey ? "Not set up" : !last ? "Set up, no syncs yet" : "Last sync " + syncWhen(last.at) + (stale ? " (more than 2 days ago)" : "");
+    if (last) {
+      body.appendChild(el("p", "note", "Last sync " + syncWhen(last.at) + " for " + last.date + ": " +
+        (last.kinds.length ? last.kinds.map(function (x) { return SYNCNAMES[x] || x; }).join(", ") : "nothing new") + "."));
+      if (last.skipped && last.skipped.length) body.appendChild(el("p", "note err", "Couldn’t read: " + last.skipped.join(", ") + "."));
+    }
+    body.appendChild(el("p", "note", k.hasKey
+      ? "An iPhone shortcut sends your steps, Move, weight and food from Apple Health here when you plug your phone in at night."
+      : "Send your steps, Move, weight and food from Apple Health here every day, with a shortcut on your iPhone."));
+    var a = el("a", "btn small" + (k.hasKey ? "" : " primary"), k.hasKey ? "Health sync settings" : "Set up Health sync");
+    a.href = "health-sync.html" + who;
+    body.appendChild(a);
+  }).catch(function () {
+    line.textContent = "Couldn’t check";
+  });
 }
 
 // Loads the numbers. Old charts stay (faded) while new ones load, so the page doesn't jump.
@@ -639,6 +707,7 @@ function load() {
 
 // New export files were uploaded: read them, then reload the charts.
 var importing = false;
+// Reads the newest uploaded Lose It or Apple Health export now, and shows how it went.
 function importNow(waiting) {
   if (importing) return;
   importing = true;
@@ -679,6 +748,7 @@ function renderRange() {
   });
 }
 
+// For admins: buttons to choose whose progress to see (hidden with only one person).
 function renderPicker(list) {
   var picker = $("people");
   picker.textContent = "";

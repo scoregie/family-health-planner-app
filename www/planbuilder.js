@@ -9,11 +9,72 @@
 //   - Portions come from age, size, activity and goal. Children are never given less to lose weight.
 //   - Shopping lists add up every recipe's amounts for the people eating them, in whole packs.
 //     Things that keep (pantry, freezer, cheese) carry over between weeks so nothing is bought twice.
+//   - Outside Australia, shop names, pack sizes and prices come from library-prices.json
+//     (opts.country), and recipe words change to the local ones ("capsicum" to "pepper").
 //   - Exercise builds gently over the 4 weeks from each person's time, equipment and health notes.
 //
 // The result goes through the same review and approval as a plan drafted by AI (plandraft.js).
-// On a server the library is loaded with require(); in the app, local-api.js passes it to build().
-let LIB = typeof require === 'function' ? require('./library.json') : null;
+// The data files. On the server they're loaded here with require(). The phone app has no
+// require(), so its local-api.js loads them itself and passes them in with useData().
+const ON_SERVER = typeof require === 'function';
+let LIB = ON_SERVER ? require('./library.json') : null;
+let EXERCISES = ON_SERVER ? require('./exercises.json').exercises : [];
+
+// Local shop names, pack sizes and prices for other countries (made by tools/build_prices.py).
+// Australia's are in library.json. A copy of the app without the file prices everything in AUD.
+let PRICES = { countries: {}, words: {} };
+try { if (ON_SERVER) PRICES = require('./library-prices.json'); } catch (e) { /* Australian prices only */ }
+
+// The country this build is for, set by useCountry() at the start of build().
+let ING = LIB ? LIB.ingredients : {};   // ingredients with this country's names, packs and prices
+let MISSING = new Set();     // ingredients that are hard to find there
+let CURRENCY = 'AUD';
+let LOCALE = 'en-AU';
+// Sets up the module for one country: its ingredient names, pack sizes and prices, what's hard to
+// find there, and its currency. Returns that country's price list (null for Australia).
+function useCountry(country, locale) {
+  LOCALE = locale || 'en-AU';
+  const c = PRICES.countries && PRICES.countries[country];
+  CURRENCY = c ? c.currency : 'AUD';
+  MISSING = new Set(c ? c.missing || [] : []);
+  ING = {};
+  for (const [k, ing] of Object.entries(LIB.ingredients)) {
+    const local = c && c.items[k];
+    // An ingredient added to the library since the price list was made: its Australian price, converted.
+    ING[k] = local ? Object.assign({}, ing, { name: local[0], pack: local[1], price: local[2] })
+      : c ? Object.assign({}, ing, { price: Math.round(ing.price * (c.rate || 1) * 100) / 100 }) : ing;
+  }
+  return c || null;
+}
+// Whether a dish or snack can be made with what the shops there sell.
+const available = d => !d.per.some(x => MISSING.has(x[0]));
+
+// An amount in this build's currency, for notes: "$120", "£85", "¥12,000".
+function priceText(n) {
+  try {
+    return new Intl.NumberFormat(LOCALE, { style: 'currency', currency: CURRENCY, maximumFractionDigits: 0 }).format(n);
+  } catch (e) {
+    return '$' + Math.round(n);
+  }
+}
+
+// Changes recipe words to the country's ("capsicum" to "pepper"), in every text and key of the plan.
+function reword(value, pairs) {
+  if (!pairs || !pairs.length) return value;
+  const res = pairs.map(([from, to]) => [new RegExp('\\b' + from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), to]);
+  const fix = text => res.reduce((t, [re, to]) => t.replace(re, m => (m[0] === m[0].toUpperCase() && m[0] !== m[0].toLowerCase() ? to[0].toUpperCase() + to.slice(1) : to)), text);
+  const walk = v => {
+    if (typeof v === 'string') return fix(v);
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const [k, x] of Object.entries(v)) out[k === 'id' ? k : fix(k)] = k === 'id' ? x : walk(x);
+      return out;
+    }
+    return v;
+  };
+  return walk(value);
+}
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DAY_NAMES = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
@@ -37,6 +98,7 @@ function list(v) {
   return v ? [String(v)] : [];
 }
 
+// A number from an answer ("1,200" gives 1200), or null if it isn't one.
 function num(v) {
   const n = parseFloat(String(v === undefined || v === null ? '' : v).replace(/,/g, ''));
   return Number.isFinite(n) ? n : null;
@@ -63,6 +125,7 @@ function words(text) {
     .map(w => w.replace(/(ies)$/, 'y').replace(/(oes)$/, 'o').replace(/s$/, ''));
 }
 
+// Rounds to the nearest step: round(237, 25) gives 225.
 function round(n, step) {
   return Math.round(n / step) * step;
 }
@@ -125,6 +188,8 @@ const MEDS = {
 const ALLERGY = { Peanuts: 'peanut', 'Tree nuts': 'treenut', Milk: 'milk', Eggs: 'egg', 'Wheat or gluten': 'gluten', Soy: 'soy', Fish: 'fish', Shellfish: 'shellfish', Sesame: 'sesame', Lactose: 'lactose' };
 const ALLERGY_WORDS = { peanut: 'peanuts', treenut: 'tree nuts', milk: 'milk', egg: 'eggs', gluten: 'gluten', soy: 'soy', fish: 'fish', shellfish: 'shellfish', sesame: 'sesame', lactose: 'lactose' };
 
+// Turns one person's About me answers into rules for the builder: allergies and diets, foods they
+// won't eat, how they like to eat, cooking time, budget, health conditions and so on.
 function rulesFor(p) {
   const a = p.answers || {};
   const age = num(a.age);
@@ -202,7 +267,7 @@ function portionFor(p, r) {
 // spices that are assumed on hand are left out (so "olives" doesn't match "olive oil").
 function dishWords(d) {
   return (d.name + ' ' + d.per.filter(x => LIB.ingredients[x[0]].aisle !== 'assumed')
-    .map(x => x[0] + ' ' + LIB.ingredients[x[0]].name).join(' ')).toLowerCase();
+    .map(x => x[0] + ' ' + LIB.ingredients[x[0]].name + ' ' + ING[x[0]].name).join(' ')).toLowerCase();
 }
 
 // Whether a dish or snack is allowed for a person (allergies, diet, foods they won't eat, textures).
@@ -290,7 +355,7 @@ function arrange(dishes) {
 // Exercise
 // ---------------------------------------------------------------------------
 
-function exerciseFor(p, r) {
+function exerciseFor(p, r, rnd) {
   const a = p.answers || {};
   const equipment = new Set(list(a.equipment));
   const gentle = ['Low energy or chronic fatigue', 'Chronic pain'].some(x => r.support.has(x));
@@ -358,15 +423,140 @@ function exerciseFor(p, r) {
       targets: [s + ' strength session' + (s > 1 ? 's' : ''), c + ' × ' + cardio.toLowerCase() + ' ' + mins + ' minutes', 'A few more steps each day than last week'],
       days: DAYS.map(day => {
         const o = { day };
-        if (sDays.includes(day)) o.strength = 'Strength ' + (ab++ % 2 ? 'B' : 'A');
+        if (sDays.includes(day)) o.strength = 'Strength ' + (w < 2 ? '1' : '2') + (ab++ % 2 ? 'B' : 'A');
         if (cDays.includes(day)) o.cardio = cardio + ' ' + mins + ' minutes';
         if (day === 'Sun') o.mobility = 'Rest, or a gentle stretch';
         return o;
       }),
     });
   }
-  const workouts = LIB.workouts[pregnant && level !== 'seated' ? 'none' : level];
-  return { weeks, top: { workouts, notes, medical } };
+  const made = strengthWorkouts(p, r, { level, gentle, pregnant, seated, injuries: injuries + ' ' + gp }, rnd || Math.random);
+  if (made.note) notes.push(made.note);
+  return { weeks, top: { workouts: made.workouts, notes, medical } };
+}
+
+// Words in someone's injuries (or what their doctor said) -> exercise flags to leave out.
+// Whole words only ("discussed" isn't a disc, "beforehand" isn't a hand), and not when just
+// before it they said it's fine ("no knee problems"). Hips have no flag of their own, so they
+// leave out the deep knee-bend moves (squats and lunges), which load the hips too.
+const INJURY_FLAGS = [
+  [/\b(knees?|acl|menisc\w*|patell\w*)\b/g, ['knees'], 'knees'],
+  [/\b(hips?|hip replacement)\b/g, ['knees'], 'hips'],
+  [/\b(spine|spinal|discs?|sciatica|lumbar|(?:lower|upper|bad|sore|injured|hurt|weak) back|back (?:pain|injur\w*|problems?|issues?|surgery|spasms?))\b/g, ['back'], 'back'],
+  [/\b(shoulders?|rotator)\b/g, ['shoulders'], 'shoulders'],
+  [/\b(wrists?|carpal|thumbs?|hands?)\b/g, ['wrists'], 'wrists or hands'],
+  [/\b(balance|falls?|fell|dizz\w*|vertigo)\b/g, ['balance'], 'balance'],
+];
+const NOT_A_PROBLEM = /\b(no|not|never|without|none|don['’]?t|haven['’]?t|isn['’]?t)\b(\s+\S+){0,2}\s*$/;
+// Whether a pattern is mentioned as a problem somewhere in the text.
+function mentions(re, text) {
+  re.lastIndex = 0;
+  for (let m; (m = re.exec(text));) if (!NOT_A_PROBLEM.test(text.slice(0, m.index))) return true;
+  return false;
+}
+
+// Which exercises suit someone: {usable(e), why: [body parts mentioned]}. `o` has seated,
+// pregnant and injuries (their injuries and what their doctor said).
+function exerciseRules(p, o) {
+  // What they can use: bodyweight always; bands and dumbbells if they have them; all of it at a gym.
+  const equip = new Set(list((p.answers || {}).equipment));
+  const gym = equip.has('Gym membership');
+  const have = new Set(['none']);
+  if (gym || equip.has('Resistance bands')) have.add('bands');
+  if (gym || equip.has('Dumbbells')) have.add('dumbbells');
+  if (gym) have.add('gym');
+
+  const skip = new Set();
+  const why = [];
+  const text = String(o.injuries || '').toLowerCase();
+  for (const [re, flags, words] of INJURY_FLAGS) if (mentions(re, text)) { flags.forEach(f => skip.add(f)); why.push(words); }
+  // Pregnant (and not exercising seated): bodyweight only, as the medical note says, and nothing lying flat.
+  if (o.pregnant) {
+    ['supine', 'prone', 'impact'].forEach(f => skip.add(f));
+    if (!o.seated) { have.clear(); have.add('none'); }
+  }
+  const disliked = new Set(Array.isArray(p.avoid) ? p.avoid : []);
+  const usable = e => have.has(e.equipment) && !disliked.has(e.id)
+    && !e.flags.some(f => skip.has(f)) && (!o.seated || e.flags.includes('seated'));
+  return { usable, why };
+}
+
+// The ids of the exercises that suit a person ({answers, avoid}), for swapping one in their plan.
+// Sitting-only ones are left out unless they exercise seated.
+function exerciseFits(p) {
+  const r = rulesFor(p);
+  const a = p.answers || {};
+  const o = {
+    seated: r.support.has('Use a wheelchair or mobility aid'),
+    pregnant: r.conditions.has('Pregnant or breastfeeding'),
+    injuries: String(a.injuries || '') + ' ' + String(a.gp || ''),
+  };
+  const { usable } = exerciseRules(p, o);
+  return EXERCISES.filter(e => usable(e) && (o.seated || !e.flags.includes('chair'))).map(e => e.id);
+}
+
+// Two strength workouts (A and B) for weeks 1 and 2, and a harder pair for weeks 3 and 4, picked
+// from exercises.json to suit the person's equipment, injuries, pregnancy, mobility and dislikes.
+// Returns {workouts, note}.
+function strengthWorkouts(p, r, o, rnd) {
+  const { usable, why } = exerciseRules(p, o);
+  const best = o.level === 'seated' ? 'none' : o.level;
+  const caps = (o.gentle || o.pregnant || o.seated || r.teen) ? [1, 2] : [2, 3];
+  const used = new Set();
+
+  // The best exercise of a type for a level cap: close to the cap, the person's own equipment
+  // first, something not used yet, with a little randomness so plans differ. One level harder
+  // is allowed when nothing else fits. Sitting-only exercises are for people who exercise seated,
+  // or a last resort (`chair`).
+  function choose(type, cap, chair) {
+    const pool = EXERCISES.filter(e => e.type === type && e.level <= cap + 1 && usable(e)
+      && (o.seated || chair || !e.flags.includes('chair')));
+    if (!pool.length) return null;
+    let top = null, topScore = -Infinity;
+    for (const e of pool) {
+      const score = (e.level > cap ? -3 : e.level) + (e.equipment === best ? 1.5 : 0) - (used.has(e.id) ? 3 : 0) + rnd() * 1.2;
+      if (score > topScore) { top = e; topScore = score; }
+    }
+    used.add(top.id);
+    return top;
+  }
+  const FALLBACK = { lunge: 'squat', calf: 'balance' };
+  const pickFor = (type, cap) => choose(type, cap) || (FALLBACK[type] && choose(FALLBACK[type], cap)) || choose(type, cap, true);
+  const line = (e, twoSets) => e.name + ' (' + (twoSets ? e.dose.replace(/^3 ×/, '2 ×') : e.dose) + '): ' + e.how;
+  const byId = id => EXERCISES.find(e => e.id === id);
+
+  const warm = o.seated ? [byId('seated-warm-up')] : [byId('march-on-the-spot'), byId('arm-circles-and-leg-swings')];
+  const coolPool = EXERCISES.filter(e => e.type === 'mobility' && usable(e) && !e.flags.includes('floor'));
+  const cool = o.seated ? [byId('seated-stretches')] : coolPool.slice(0, 3);
+  const SLOTS = {
+    A: ['squat', 'push', 'hinge', 'pull', 'core'],
+    B: ['lunge', 'pull', 'push', 'hinge', o.seated ? 'arms' : 'calf', 'core'],
+  };
+  const workouts = [];
+  [0, 1].forEach(block => {
+    const cap = caps[block];
+    ['A', 'B'].forEach(letter => {
+      const picked = [];
+      for (const type of SLOTS[letter]) {
+        const e = pickFor(type, cap);
+        if (e) picked.push(e);
+      }
+      const minutes = Math.round((8 + picked.length * 5 + (o.seated ? 3 : 5)) / 5) * 5;
+      workouts.push({
+        name: 'Strength ' + (block + 1) + letter + ': ' + picked.slice(0, 3).map(e => e.name.toLowerCase()).join(', ') + ' (weeks ' + (block ? '3 and 4' : '1 and 2') + ')',
+        time: 'About ' + minutes + ' minutes',
+        items: [].concat(
+          warm.filter(Boolean).map(e => 'Warm-up: ' + line(e)),
+          picked.map(e => line(e, block === 0 && o.gentle)),
+          cool.filter(Boolean).map(e => 'Cool-down: ' + line(e)),
+        ),
+      });
+    });
+  });
+  const note = why.length
+    ? 'You mentioned your ' + why.join(' and ') + ', so the exercises that put the most load there are left out. Swap anything that still doesn’t feel right from the Exercise library.'
+    : '';
+  return { workouts, note };
 }
 
 // ---------------------------------------------------------------------------
@@ -374,7 +564,7 @@ function exerciseFor(p, r) {
 // ---------------------------------------------------------------------------
 
 function build(people, opts) {
-  if (opts && opts.library) LIB = opts.library;
+  const local = useCountry(opts && opts.country, opts && opts.locale);
   const rnd = random(opts && opts.seed || Date.now());
   const rules = people.map(rulesFor);
   rules.forEach((r, i) => { r.portion = portionFor(people[i], r); });
@@ -397,18 +587,30 @@ function build(people, opts) {
     tries++;
     const weekly = plan.weeks.reduce((n, w) => n + w.cost, 0) / 4;
     if (!house.budget || weekly <= house.budget * 1.1 || tries >= 4) {
-      if (house.budget && weekly > house.budget * 1.1) forAdmin.push('The cheapest plan that fits everyone’s needs is about $' + Math.round(weekly) + ' a week, over the $' + house.budget + ' budget from About me. Swapping a couple of meat dinners for vegetarian ones would bring it down.');
+      if (house.budget && weekly > house.budget * 1.1) forAdmin.push('The cheapest plan that fits everyone’s needs is about ' + priceText(weekly) + ' a week, over the ' + priceText(house.budget) + ' budget from About me. Swapping a couple of meat dinners for vegetarian ones would bring it down.');
       break;
     }
     house.costWeight *= 2.5;
     forAdmin.length = 0;
   } while (true);
   if (!adults.length) forAdmin.push('Everyone in the plan is a child, so portions are child-sized. Add the adults to the family for a full plan.');
+  if (local && local.words) plan = reword(plan, PRICES.words[local.words]);
   return { plan, notesForAdmin: forAdmin.join(' ') };
 }
 
+// When no breakfast (or lunch) in the library suits the family, the plan says "your own choice"
+// for that meal instead of failing, and tells the admin. Returns the dishes, or that one stand-in.
+function orOwnChoice(dishes, meal, forAdmin) {
+  if (dishes.length) return dishes;
+  if (forAdmin) forAdmin.push('No ' + meal + ' in the app’s library suits everyone’s allergies and diets, so ' + meal + ' is left to each person’s own choice. You can add one in Edit plan.');
+  return [{ name: 'Your own choice of ' + meal, meal, ownChoice: true, per: [], tags: [], kit: [], steps: [], minutes: 0,
+    macros: { p: 0, c: 0, f: 0, kj: 0 }, groups: {}, cost: 0 }];
+}
+
+// One try at a whole plan: picks dinners, lunches, breakfasts and snacks for each week, makes the
+// recipes and shopping lists, and adds exercise. build() calls this again (cheaper) if it's over budget.
 function attempt(people, rules, house, rnd, repeat, forAdmin) {
-  const byMeal = m => LIB.dishes.filter(d => d.meal === m && canCook(d, house) && !(d.tags || []).some(t => house.hard.has(t)));
+  const byMeal = m => LIB.dishes.filter(d => d.meal === m && available(d) && canCook(d, house) && !(d.tags || []).some(t => house.hard.has(t)));
   const dinners = byMeal('dinner');
   const lunches = byMeal('lunch');
   const breakfasts = byMeal('breakfast');
@@ -438,10 +640,10 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
     week.forEach(d => recent.add(d.name));
     // Breakfasts: three that suit everyone, rotated.
     const bShared = breakfasts.filter(everyone);
-    const bPick = pick(bShared.length ? bShared : breakfasts, 3, rules, house, rnd, new Set());
+    const bPick = orOwnChoice(pick(bShared.length ? bShared : breakfasts, 3, rules, house, rnd, new Set()), 'breakfast', w ? null : forAdmin);
     // Lunches at home (adults): two that suit everyone, plus leftovers.
     const lShared = lunches.filter(everyone);
-    const lPick = pick(lShared.length ? lShared : lunches, 2, rules.filter(r => !r.kid), house, rnd, new Set());
+    const lPick = orOwnChoice(pick(lShared.length ? lShared : lunches, 2, rules.filter(r => !r.kid), house, rnd, new Set()), 'lunch', w ? null : forAdmin);
 
     const days = DAYS.map((day, i) => {
       const dinner = week[i];
@@ -477,7 +679,7 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
   const exercise = {};
   const topExercise = {};
   people.forEach((p, i) => {
-    const ex = exerciseFor(p, rules[i]);
+    const ex = exerciseFor(p, rules[i], rnd);
     exercise[p.key] = ex.weeks;
     topExercise[p.key] = ex.top;
   });
@@ -488,7 +690,7 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
     const need = {};
     const addNeed = (dish, serves) => {
       for (const [k, amount] of dish.per) {
-        const ing = LIB.ingredients[k];
+        const ing = ING[k];
         if (ing.aisle === 'assumed') continue;
         need[k] = (need[k] || 0) + amount * serves;
       }
@@ -508,7 +710,7 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
         }
       });
       m.breakfast = day.breakfast.name;
-      addNeed(day.breakfast, bServes); addCooked(day.breakfast, bServes); used.set(day.breakfast.name, day.breakfast);
+      if (!day.breakfast.ownChoice) { addNeed(day.breakfast, bServes); addCooked(day.breakfast, bServes); used.set(day.breakfast.name, day.breakfast); }
       // Dinner (and extra for tomorrow's leftovers).
       let dServes = 0;
       rules.forEach(r => {
@@ -544,7 +746,7 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
         });
       } else {
         m.lunch = day.lunch.name;
-        used.set(day.lunch.name, day.lunch);
+        if (!day.lunch.ownChoice) used.set(day.lunch.name, day.lunch);
         let lServes = 0;
         rules.forEach(r => {
           if (r.kid && ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(day.day)) return;
@@ -557,7 +759,7 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
             }
           }
         });
-        addNeed(day.lunch, lServes); addCooked(day.lunch, lServes);
+        if (!day.lunch.ownChoice) { addNeed(day.lunch, lServes); addCooked(day.lunch, lServes); }
       }
       if (Object.keys(overrides).length) m.people = overrides;
       return m;
@@ -568,7 +770,7 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
       const p = planPeople[r.key];
       if (!p.weekday) {
         const packs = own[r.key].lunches.filter(d => d.packable);
-        const kidSnacks = LIB.snacks.filter(s => s.kids && allowed(s, r));
+        const kidSnacks = LIB.snacks.filter(s => s.kids && available(s) && allowed(s, r));
         p.weekday = {};
         DAYS.slice(0, 5).forEach((d, i) => {
           const l = packs[i % Math.max(1, packs.length)];
@@ -658,7 +860,8 @@ function attempt(people, rules, house, rnd, repeat, forAdmin) {
   plan.title = 'Meal and exercise plan';
   const f1 = plan.weeks.slice(0, 3).reduce((n, w) => n + w.cost, 0);
   const f2 = plan.weeks.slice(3, 6).reduce((n, w) => n + w.cost, 0);
-  plan.subtitle = 'Built by the app from everyone’s answers. Fortnight 1 about $' + Math.round(f1) + ', fortnight 2 about $' + Math.round(f2) + '. Prices are estimates.';
+  plan.subtitle = 'Built by the app from everyone’s answers. Fortnight 1 about ' + priceText(f1) + ', fortnight 2 about ' + priceText(f2) + '. Prices are estimates.';
+  plan.currency = CURRENCY;
   plan.people = planPeople;
   plan.exercise = topExercise;
   plan.macros = macros;
@@ -709,13 +912,14 @@ const EACH = { egg: 'eggs', tomato: 'tomatoes', wraps: 'wraps', rolls: 'bread ro
   lemon: 'lemons', lettuce: 'cos lettuces', cucumber: 'Lebanese cucumbers', capsicum: 'red capsicums', zucchini: 'zucchinis',
   broccoli: 'heads of broccoli', celery: 'half bunches of celery', cauliflower: 'cauliflowers', 'spring onion': 'bunches of spring onions' };
 
+// The name and counting word for an ingredient in a recipe ("tomato", "tomatoes").
 function labelOf(k) {
   return { name: k.replace(/ big$/, '').replace('stock', 'stock').replace('veg stock', 'vegetable stock'), each: EACH[k] || k };
 }
 
 // Two snacks a day for each person, tied to exercise where it helps.
 function snacksFor(r, exWeeks) {
-  const ok = LIB.snacks.filter(s => allowed(s, r) && (!r.kid || s.kids));
+  const ok = LIB.snacks.filter(s => available(s) && allowed(s, r) && (!r.kid || s.kids));
   const by = kind => ok.filter(s => s.kind === kind);
   const protein = by('protein'), fruit = by('fruit'), other = by('other').concat(by('veg'));
   const out = [];
@@ -744,7 +948,7 @@ function guideFor(r, p) {
   else if (Math.abs(r.portion - 1) >= 0.05) bits.push('Serves are about ' + Math.round(Math.abs(r.portion - 1) * 100) + '% ' + (r.portion > 1 ? 'bigger' : 'smaller') + ' than average, worked out from your age, size, activity and goal.');
   else bits.push('Serves are about average for your age, size, activity and goal.');
   const left = [...r.hard].map(t => ALLERGY_WORDS[t] || t);
-  if (left.length) bits.push('Your meals leave out ' + left.join(', ') + '. Always check labels too.');
+  if (left.length) bits.push('Your meals leave out ' + left.join(', ') + '. Check labels too.');
   if (r.diet.has('meat') && r.diet.has('animal')) bits.push('All your meals are vegan.');
   else if (r.diet.has('meat') && r.diet.has('fish')) bits.push('All your meals are vegetarian.');
   else if (r.diet.has('meat')) bits.push('Your meals have no meat (fish is fine).');
@@ -755,7 +959,7 @@ function guideFor(r, p) {
   if (r.help.has('Ready-to-eat options for low-energy days')) tips.push('On a low-energy day, a sandwich, Weet-Bix or cheese and crackers is a fine dinner.');
   if (r.help.has('Cooking a batch on a good day')) tips.push('Dinners that freeze well (chilli, bolognese, curries, soups) can be doubled on a good day.');
   const safe = String((p.answers || {}).safe_foods || '').trim();
-  if (safe) tips.push('Your safe foods (' + safe.slice(0, 120) + ') are always fine on a hard day.');
+  if (safe) tips.push('Your safe foods (' + safe.slice(0, 120) + ') are kept in for hard days.');
   for (const m of r.meds) if (MEDS[m] && MEDS[m].food) tips.push(MEDS[m].food);
   if (r.conditions.has('Coeliac disease')) tips.push('You said you have coeliac disease: check every label for gluten, including sauces and stock.');
   if (r.conditions.has('Reflux')) tips.push('You mentioned reflux: smaller dinners earlier in the evening may help.');
@@ -774,7 +978,7 @@ function shoppingFor(needs) {
   const stockBought = [{}, {}];
   needs.forEach((need, w) => {
     for (const [k, amount] of Object.entries(need)) {
-      const ing = LIB.ingredients[k];
+      const ing = ING[k];
       if (!ing.pack) continue;
       let want = amount;
       const shelf = (onHand[k] || []).filter(x => x.until >= w);
@@ -798,7 +1002,7 @@ function shoppingFor(needs) {
   const toList = counts => {
     const out = {};
     for (const [k, packs] of Object.entries(counts)) {
-      const ing = LIB.ingredients[k];
+      const ing = ING[k];
       const section = SECTION[ing.aisle];
       const name = ing.name + (packs > 1 ? ' × ' + packs : '');
       (out[section] = out[section] || []).push([name, money(ing.price * packs)]);
@@ -810,5 +1014,19 @@ function shoppingFor(needs) {
   return { weekly: bought.map(toList), stock: stockBought.map(toList) };
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { build, rulesFor, portionFor, allowed };
-else window.PlanBuilder = { build, rulesFor, portionFor, allowed };
+// Gives the builder its data where require() isn't available (the phone app):
+// {library: library.json, exercises: exercises.json, prices: library-prices.json}.
+function useData(data) {
+  LIB = data.library;
+  EXERCISES = data.exercises.exercises || data.exercises;
+  if (data.prices) PRICES = data.prices;
+  ING = LIB.ingredients;
+}
+
+const PlanBuilder = {
+  build, rulesFor, portionFor, allowed, exerciseFits, useData,
+  get EXERCISES() { return EXERCISES; },
+  get LIB() { return LIB; },
+};
+if (typeof module === 'object' && module.exports) module.exports = PlanBuilder;
+else window.PlanBuilder = PlanBuilder;

@@ -2,6 +2,19 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.2.0 (2026-11-10)
+
+Brings the app up to date with the web version (v1.4.2).
+
+- **Your country:** pick from 22 countries in Family and plan. Plans use that country's currency, shop names, pack sizes and prices, and the shopping links search its supermarkets.
+- **Today:** a new front page with each person's meals, exercise and shopping for the day. The account menu is now a **More** tab.
+- **Exercise library:** 94 exercises with how-to steps. Plans pick varied workouts to suit each person's equipment, injuries and pregnancy. Leave out exercises you don't want, or **Swap** one in your plan.
+- **Gluten-free meals:** the plan builder couldn't make a plan for someone with a wheat or gluten allergy. It now has gluten-free breakfasts and lunches.
+- **Names in any alphabet,** like ゆき or 민준.
+- Settings open one section at a time; Backup is one of them.
+- Fonts now include accented letters (Latin Extended). More → About this app explains that the plan isn't medical advice and that everything stays on the phone.
+- Health notes follow the wording rules ("considerations", no "always" or "never").
+
 ## v0.1.0 (2026-11-08)
 
 The first version of the standalone app, for testing before the App Store and Google Play.
