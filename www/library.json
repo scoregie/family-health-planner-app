@@ -7349,6 +7349,420 @@
     "red"
    ],
    "cost": 7.16
+  },
+  {
+   "name": "Chicken, pumpkin and chickpea tray bake",
+   "meal": "dinner",
+   "cuisine": "Middle Eastern",
+   "minutes": 45,
+   "kit": [
+    "oven"
+   ],
+   "per": [
+    [
+     "chicken thigh",
+     150
+    ],
+    [
+     "pumpkin",
+     200
+    ],
+    [
+     "chickpeas",
+     80
+    ],
+    [
+     "onion",
+     50
+    ],
+    [
+     "lemon",
+     0.25
+    ],
+    [
+     "oil",
+     8
+    ]
+   ],
+   "steps": [
+    "Heat the oven to 200°C.",
+    "Cut the pumpkin into 3 cm pieces and the onion into wedges. Drain and rinse the chickpeas.",
+    "Toss everything except the lemon with the oil, salt, pepper and a teaspoon of ground cumin or paprika on a big tray.",
+    "Sit the chicken on top and roast for 35 to 40 minutes, until the chicken is cooked through and the pumpkin is soft.",
+    "Squeeze the lemon over before serving."
+   ],
+   "leftovers": true,
+   "separate": true,
+   "onepan": true,
+   "kid": "Serve the chicken, pumpkin and chickpeas in separate piles; leave the lemon off.",
+   "macros": {
+    "p": 38,
+    "c": 38,
+    "f": 17,
+    "kj": 1850
+   },
+   "groups": {
+    "veg": 3.3,
+    "protein": 2,
+    "fv": 250,
+    "leg": 80,
+    "side": 250,
+    "mp": 35
+   },
+   "tags": [
+    "meat",
+    "poultry"
+   ],
+   "cost": 3.6
+  },
+  {
+   "name": "Tuna and sweet potato patties with salad",
+   "meal": "dinner",
+   "cuisine": "Australian",
+   "minutes": 35,
+   "kit": [
+    "microwave",
+    "stovetop"
+   ],
+   "per": [
+    [
+     "tuna big",
+     90
+    ],
+    [
+     "sweet potato",
+     180
+    ],
+    [
+     "egg",
+     0.5
+    ],
+    [
+     "spring onion",
+     0.2
+    ],
+    [
+     "salad leaves",
+     50
+    ],
+    [
+     "lemon",
+     0.25
+    ],
+    [
+     "oil",
+     8
+    ]
+   ],
+   "steps": [
+    "Peel and dice the sweet potato. Microwave it covered with a splash of water for 8 to 10 minutes until soft, then mash.",
+    "Mix in the drained tuna, the egg and the sliced spring onion. Shape into patties about 2 cm thick.",
+    "Fry in the oil over medium heat for 4 minutes a side until golden.",
+    "Serve with the salad leaves and a squeeze of lemon."
+   ],
+   "separate": true,
+   "packable": true,
+   "texture": [
+    "soft"
+   ],
+   "kid": "Make small patties; they're good cold in a lunchbox.",
+   "macros": {
+    "p": 31,
+    "c": 42,
+    "f": 12,
+    "kj": 1630
+   },
+   "groups": {
+    "veg": 3.3,
+    "protein": 1.1,
+    "fv": 250,
+    "fish": 90,
+    "side": 250,
+    "mp": 26
+   },
+   "tags": [
+    "animal",
+    "egg",
+    "fish"
+   ],
+   "cost": 4.35
+  },
+  {
+   "name": "Chicken and corn noodle soup",
+   "meal": "dinner",
+   "cuisine": "Chinese",
+   "minutes": 25,
+   "kit": [
+    "stovetop"
+   ],
+   "per": [
+    [
+     "chicken breast",
+     120
+    ],
+    [
+     "egg noodles",
+     60
+    ],
+    [
+     "corn",
+     60
+    ],
+    [
+     "stock",
+     350
+    ],
+    [
+     "spring onion",
+     0.2
+    ],
+    [
+     "ginger",
+     4
+    ],
+    [
+     "soy sauce",
+     10
+    ]
+   ],
+   "steps": [
+    "Bring the stock to a simmer with the grated ginger.",
+    "Slice the chicken thinly, add it and simmer for 6 minutes until cooked through.",
+    "Add the noodles and corn and cook for 3 to 4 minutes.",
+    "Season with the soy sauce and scatter the sliced spring onion on top."
+   ],
+   "batch": true,
+   "texture": [
+    "mixed"
+   ],
+   "kid": "Lift the noodles, chicken and corn out with a slotted spoon if they'd rather not have soup.",
+   "macros": {
+    "p": 40,
+    "c": 56,
+    "f": 7,
+    "kj": 1890
+   },
+   "groups": {
+    "veg": 1.1,
+    "grain": 2,
+    "protein": 1.2,
+    "fv": 80,
+    "side": 80,
+    "gc": 43,
+    "mp": 27
+   },
+   "tags": [
+    "animal",
+    "egg",
+    "gluten",
+    "meat",
+    "poultry",
+    "soy"
+   ],
+   "cost": 3.84
+  },
+  {
+   "name": "Pork and broccoli rice noodles",
+   "meal": "dinner",
+   "cuisine": "Thai",
+   "minutes": 25,
+   "kit": [
+    "stovetop"
+   ],
+   "per": [
+    [
+     "pork mince",
+     120
+    ],
+    [
+     "rice noodles",
+     70
+    ],
+    [
+     "broccoli",
+     0.3
+    ],
+    [
+     "egg",
+     0.5
+    ],
+    [
+     "garlic",
+     0.1
+    ],
+    [
+     "soy sauce",
+     15
+    ],
+    [
+     "oil",
+     8
+    ]
+   ],
+   "steps": [
+    "Soak or cook the rice noodles as the packet says, then drain.",
+    "Cut the broccoli into small florets and stir-fry it in half the oil with a splash of water for 3 minutes. Set aside.",
+    "Brown the pork mince with the crushed garlic in the rest of the oil, breaking it up.",
+    "Push the pork aside, scramble the egg in the gap, then add the noodles, broccoli and soy sauce and toss until hot."
+   ],
+   "leftovers": true,
+   "separate": true,
+   "kid": "Keep some plain noodles and pork aside before adding the soy sauce.",
+   "macros": {
+    "p": 32,
+    "c": 66,
+    "f": 37,
+    "kj": 3060
+   },
+   "groups": {
+    "veg": 1.4,
+    "grain": 2.3,
+    "protein": 1.6,
+    "fv": 105,
+    "red": 84,
+    "side": 105,
+    "gc": 56,
+    "mp": 24
+   },
+   "tags": [
+    "animal",
+    "egg",
+    "gluten",
+    "meat",
+    "pork",
+    "red",
+    "soy"
+   ],
+   "cost": 3.89
+  },
+  {
+   "name": "Ricotta and berry toast",
+   "meal": "breakfast",
+   "cuisine": "Australian",
+   "minutes": 10,
+   "kit": [
+    "microwave"
+   ],
+   "per": [
+    [
+     "bread",
+     70
+    ],
+    [
+     "ricotta",
+     60
+    ],
+    [
+     "frozen berries",
+     60
+    ],
+    [
+     "honey",
+     8
+    ]
+   ],
+   "steps": [
+    "Toast the bread.",
+    "Warm the berries in the microwave for 40 seconds so they're soft and juicy.",
+    "Spread the ricotta on the toast, spoon the berries over and drizzle with the honey."
+   ],
+   "texture": [
+    "soft"
+   ],
+   "kid": "Serve the berries in a little bowl for dipping.",
+   "macros": {
+    "p": 14,
+    "c": 48,
+    "f": 9,
+    "kj": 1340
+   },
+   "groups": {
+    "fruit": 0.4,
+    "grain": 1.8,
+    "dairy": 0.5,
+    "fv": 60,
+    "gc": 30,
+    "ca": 124
+   },
+   "tags": [
+    "animal",
+    "gluten",
+    "honey",
+    "lactose",
+    "milk"
+   ],
+   "cost": 1.68
+  },
+  {
+   "name": "Couscous salad with chickpeas and feta",
+   "meal": "lunch",
+   "cuisine": "Middle Eastern",
+   "minutes": 15,
+   "kit": [],
+   "per": [
+    [
+     "couscous",
+     50
+    ],
+    [
+     "chickpeas",
+     80
+    ],
+    [
+     "cucumber",
+     0.3
+    ],
+    [
+     "tomato",
+     0.5
+    ],
+    [
+     "feta",
+     30
+    ],
+    [
+     "lemon",
+     0.25
+    ],
+    [
+     "oil",
+     8
+    ]
+   ],
+   "steps": [
+    "Pour the same amount of boiling water over the couscous, cover for 5 minutes, then fluff with a fork.",
+    "Dice the cucumber and tomato. Drain and rinse the chickpeas.",
+    "Toss everything with the crumbled feta, lemon juice, oil, salt and pepper."
+   ],
+   "leftovers": true,
+   "packable": true,
+   "texture": [
+    "mixed"
+   ],
+   "macros": {
+    "p": 18,
+    "c": 64,
+    "f": 17,
+    "kj": 1990
+   },
+   "groups": {
+    "veg": 1.7,
+    "grain": 1.7,
+    "protein": 0.5,
+    "dairy": 0.8,
+    "fv": 129,
+    "leg": 80,
+    "side": 129,
+    "gc": 39,
+    "mp": 6,
+    "ca": 148
+   },
+   "tags": [
+    "animal",
+    "gluten",
+    "milk"
+   ],
+   "cost": 2.46
   }
  ],
  "snacks": [
@@ -7787,6 +8201,66 @@
    "tags": [
     "animal",
     "milk"
+   ]
+  },
+  {
+   "what": "Edamame and a mandarin",
+   "per": [
+    [
+     "edamame",
+     80
+    ],
+    [
+     "mandarin",
+     100
+    ]
+   ],
+   "kind": "protein",
+   "kids": true,
+   "macros": {
+    "p": 10,
+    "c": 19,
+    "f": 4,
+    "kj": 590
+   },
+   "groups": {
+    "fruit": 0.7,
+    "protein": 0.5,
+    "fv": 100,
+    "leg": 80,
+    "mp": 9
+   },
+   "tags": [
+    "soy"
+   ]
+  },
+  {
+   "what": "Capsicum sticks with hummus",
+   "per": [
+    [
+     "capsicum",
+     0.5
+    ],
+    [
+     "hummus",
+     40
+    ]
+   ],
+   "kind": "veg",
+   "kids": true,
+   "macros": {
+    "p": 4,
+    "c": 11,
+    "f": 7,
+    "kj": 490
+   },
+   "groups": {
+    "veg": 1.2,
+    "fv": 90,
+    "side": 90
+   },
+   "tags": [
+    "sesame"
    ]
   }
  ],

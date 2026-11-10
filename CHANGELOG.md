@@ -2,6 +2,14 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.2.3 (2026-11-10)
+
+Catches up with the web version's shared library (`library-community.json`):
+
+- **6 more dishes:** chicken, pumpkin and chickpea tray bake; tuna and sweet potato patties; chicken and corn noodle soup; pork and broccoli rice noodles; ricotta and berry toast; couscous salad with chickpeas and feta.
+- **2 more snacks:** edamame and a mandarin; capsicum sticks with hummus.
+- **6 more exercises:** band, dumbbell and leg press calf raises, band side steps, single-leg leg press and cable biceps curl.
+
 ## v0.2.2 (2026-11-10)
 
 - **10 French dishes** for the plan builder, from web v1.4.4: omelette, French toast, quiche, croque monsieur, niçoise salad, lentil soup, chicken ratatouille, chicken fricassee, salmon parcels and a slow-cooker beef bourguignon. Choosing French in "Kinds of food you'd like more of" now favours them.
