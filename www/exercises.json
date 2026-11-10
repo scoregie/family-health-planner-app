@@ -1123,6 +1123,68 @@
     "floor",
     "knees"
    ]
+  },
+  {
+   "id": "band-calf-raise",
+   "name": "Band calf raise",
+   "type": "calf",
+   "equipment": "bands",
+   "level": 1,
+   "dose": "3 × 15",
+   "how": "Loop the band under the balls of your feet and hold the ends at your shoulders. Rise onto your toes, then lower slowly. Hold a wall if you need to.",
+   "flags": []
+  },
+  {
+   "id": "dumbbell-calf-raise",
+   "name": "Dumbbell calf raise",
+   "type": "calf",
+   "equipment": "dumbbells",
+   "level": 2,
+   "dose": "3 × 12",
+   "how": "A dumbbell in each hand by your sides. Rise up onto your toes, pause, then lower slowly.",
+   "flags": []
+  },
+  {
+   "id": "leg-press-calf-raise",
+   "name": "Leg press calf raise",
+   "type": "calf",
+   "equipment": "gym",
+   "level": 2,
+   "dose": "3 × 15",
+   "how": "On the leg press, the balls of your feet on the bottom edge of the plate and legs straight but not locked. Push through your toes, then let your heels back slowly.",
+   "flags": []
+  },
+  {
+   "id": "band-side-steps",
+   "name": "Band side steps",
+   "type": "balance",
+   "equipment": "bands",
+   "level": 1,
+   "dose": "3 × 10 steps each way",
+   "how": "Band just above your knees, knees slightly bent. Take small steps sideways keeping the band tight, then step back the other way.",
+   "flags": []
+  },
+  {
+   "id": "single-leg-leg-press",
+   "name": "Single-leg leg press",
+   "type": "lunge",
+   "equipment": "gym",
+   "level": 2,
+   "dose": "3 × 10 each leg",
+   "how": "On the leg press with a light weight, one foot in the middle of the plate. Lower until your knee is at about a right angle, then press away without locking the knee.",
+   "flags": [
+    "knees"
+   ]
+  },
+  {
+   "id": "cable-biceps-curl",
+   "name": "Cable biceps curl",
+   "type": "arms",
+   "equipment": "gym",
+   "level": 1,
+   "dose": "2 × 12",
+   "how": "Facing a low cable with a straight bar, elbows by your sides. Curl the bar up to your chest, then lower it slowly.",
+   "flags": []
   }
  ]
 }
