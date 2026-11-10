@@ -4,7 +4,7 @@ Each version is tagged on GitHub (see Releases) with these notes.
 
 ## v0.2.1 (2026-11-10)
 
-Matches web v1.4.3: **French** is now in "Kinds of food you'd like more of", and **Cordial** in "What do you usually drink?".
+Matches web v1.4.3: **French** is now in "Kinds of food you'd like more of", and **Cordial** in "What do you usually drink?". Also matches web v1.4.4: choosing **Australian classics** now makes the plan builder favour Australian dishes (it was ignored before).
 
 ## v0.2.0 (2026-11-10)
 
