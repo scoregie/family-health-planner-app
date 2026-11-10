@@ -2,6 +2,10 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.3.1 (2026-11-10)
+
+Plan builder fixes from web v1.5.1: foot and ankle injuries are recognised; leg injuries get a swim or bike ride instead of walks; "most veggies" in dislikes means fewer vegetables; children's packed lunches follow their likes and dislikes.
+
 ## v0.3.0 (2026-11-10)
 
 Matches web v1.5.0:
