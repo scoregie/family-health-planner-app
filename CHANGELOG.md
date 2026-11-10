@@ -2,6 +2,24 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.4.0 (2026-11-10)
+
+Catches up with web v1.5.2 to v1.8.0:
+
+- **Health targets come before likes.** Every plan now aims for each person's serves of vegetables and fruit for their age and sex, children included, after allergies, diets and medicine rules. Safe foods and textures decide the form food comes in; likes and dislikes choose between dishes that already fit. The draft shows how each person's days measure up before you approve it.
+- **Each person picks the pace** with a new About me question, "How much should the plan change what you eat?": from week 1, building up over the 4 weeks, or keeping close to what they eat now. A second new question asks what they usually eat in a day.
+- **What's already in your kitchen?** A list on Family and plan ("rice 2 kg", "6 eggs"). The next plan uses that food first and leaves it off the shopping lists.
+- **Feedback is used.** Dinners someone scored low turn up less often for them, ones they scored high more often, and a logged weight replaces the About me weight for serve sizes.
+- **Small steps** for people who aren't keen on vegetables or fruit: one new food to try each week, a short step on from a food they already like, with "Tried it", "Liked it" and "Not this time" on the Meals page.
+- **"Likely left over this week"** on the Shopping page.
+- **About me shows one section at a time**, with "Show everything on one page" for anyone who prefers that.
+- **A fuller look at a draft** before approving: every day's meals, and each person's tips, small steps and considerations. Today shows a banner when a draft is waiting.
+- **Your country moved to Settings.**
+- 9 more snacks and vegetable sides in the library, and the estimators recognise more foods.
+- About me now says plainly that answers stay on this phone.
+
+Not in the app (web only): AI-written plans and their checks, and reading uploaded blood test results.
+
 ## v0.3.1 (2026-11-10)
 
 Plan builder fixes from web v1.5.1: foot and ankle injuries are recognised; leg injuries get a swim or bike ride instead of walks; "most veggies" in dislikes means fewer vegetables; children's packed lunches follow their likes and dislikes.
