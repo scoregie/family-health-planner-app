@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+  Plan setup (admins): the country, everyone's About me progress, choosing an AI, drafting and approving the plan, and new library meals.
+  How this file is laid out: the style section at the top sets the look, the body is the
+  layout, and the script section near the end makes it work (asking the server for data with
+  fetch() and drawing it). docs/how-it-works.md explains how the pages and the server fit together.
+-->
 <html lang="en-AU">
 <head>
 <script src="local-api.js"></script>
@@ -8,7 +14,7 @@
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121214">
 <link rel="icon" type="image/png" href="icon-192.png">
 <title>Family and plan</title>
-<link rel="stylesheet" href="fonts.css">
+<link href="fonts/fonts.css" rel="stylesheet">
 <link rel="stylesheet" href="page.css">
 <style>
 .member{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.65rem 0;border-top:1px solid var(--line)}
@@ -38,8 +44,20 @@ textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var
 .choice input:disabled+span{opacity:.6;cursor:default}
 select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:.5rem;padding:.45rem .6rem;max-width:100%}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.lib-row{display:flex;justify-content:space-between;gap:.8rem;align-items:flex-start;padding:.6rem 0;border-top:1px solid var(--line)}
+.lib-row:first-child{border-top:0}
+.lib-row b{display:block}
+.lib-row small{display:block;color:var(--mute);font-size:.85rem}
+.switch{flex:none;display:flex;align-items:center;gap:.4rem;font-size:.9rem;cursor:pointer;min-height:2.5rem}
+.switch input{width:1.3rem;height:1.3rem;accent-color:var(--accent)}
+.pend{border:1px solid var(--line);border-radius:.6rem;padding:.5rem .7rem;margin:.4rem 0}
+.pend summary{cursor:pointer;display:flex;justify-content:space-between;gap:.5rem}
+.pend summary span{color:var(--mute);font-size:.85rem;white-space:nowrap}
+.pend ol,.pend ul{margin:.3rem 0 .3rem 1.1rem;padding:0;font-size:.9rem}
+.pend .row{margin-top:.4rem}
 .warn{border-left:4px solid var(--mid,#8a5a00);padding:.5rem .8rem;background:var(--bg);border-radius:.3rem;font-size:.92rem;margin:.6rem 0}
 </style>
+<script src="regions.js"></script>
 <script src="appearance.js"></script>
 </head>
 <body>
@@ -50,6 +68,12 @@ select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(-
   </div>
   <div id="msg"></div>
   <div id="app" hidden>
+    <section class="card" id="countryCard">
+      <h2>Your country</h2>
+      <label for="country" class="note">Sets the currency, date style, energy unit and grocery stores for everyone.</label>
+      <div><select id="country"></select></div>
+      <p class="note" id="countryNote"></p>
+    </section>
     <section class="card">
       <h2><span class="step">1</span>Your family</h2>
       <p class="note">Add everyone the plan is for, then answer the About me questions for each person and tap “I’m finished”. Everything stays on this phone.</p>
@@ -81,6 +105,7 @@ select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(-
       <h2><span class="step">3</span>Review and approve</h2>
       <div id="review"></div>
     </section>
+
   </div>
 </main>
 <div class="status" id="status" role="status" hidden></div>
@@ -96,6 +121,7 @@ function $(id) {
   return document.getElementById(id);
 }
 
+// Makes a new page element (like a paragraph or button), with an optional CSS class and text.
 function el(tag, cls, txt) {
   var e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -103,6 +129,8 @@ function el(tag, cls, txt) {
   return e;
 }
 
+// Asks the server for something (or sends it a change) and waits for the answer. Returns a
+// "promise": .then(...) runs with the answer, .catch(...) with the error message if it failed.
 function api(method, url, body) {
   return fetch(url, {
     method: method,
@@ -117,6 +145,7 @@ function api(method, url, body) {
   });
 }
 
+// Shows a short message at the bottom of the screen (red for errors), then hides it.
 function status(text, isError) {
   var s = $("status");
   s.textContent = text;
@@ -126,8 +155,9 @@ function status(text, isError) {
   status.timer = setTimeout(function () { s.hidden = true; }, isError ? 6000 : 3000);
 }
 
+// An amount of money in the draft plan's currency, rounded to whole units.
 function money(n) {
-  return "$" + Math.round(n || 0);
+  return Appearance.money(n, DATA && DATA.draft && DATA.draft.currency, true);
 }
 
 // Step 1: everyone in the plan and how far through About me they are.
@@ -165,13 +195,14 @@ function renderPeople() {
 // Step 2: which AI the family uses (or none), and its model.
 var AI_ABOUT = {
   none: ["No AI", "The app’s built-in plan builder. Free and private: nothing leaves your server. Plans are simpler than an AI’s."],
-  anthropic: ["Claude", "Anthropic. Needs ANTHROPIC_API_KEY on the server. Writes the most detailed plans."],
-  openai: ["OpenAI", "ChatGPT’s maker. Needs OPENAI_API_KEY on the server."],
-  gemini: ["Gemini", "Google. Needs GEMINI_API_KEY on the server."],
-  ollama: ["Ollama (local)", "A free AI running on your own computer. Needs OLLAMA_URL on the server and a powerful machine."],
+  anthropic: ["Claude", "Anthropic. Needs ANTHROPIC_API_KEY on the server. Writes the most detailed plans. Everyone’s About me answers (including health and medicines) are sent to Anthropic to write the plan."],
+  openai: ["OpenAI", "ChatGPT’s maker. Needs OPENAI_API_KEY on the server. Everyone’s About me answers (including health and medicines) are sent to OpenAI to write the plan."],
+  gemini: ["Gemini", "Google. Needs GEMINI_API_KEY on the server. Everyone’s About me answers (including health and medicines) are sent to Google to write the plan."],
+  ollama: ["Ollama (local)", "A free AI running on your own computer. Needs OLLAMA_URL on the server and a powerful machine. Answers stay on that computer."],
 };
 var aiModels = {};   // provider -> [models], once loaded
 
+// Step 2: which AI the family uses (or none), with what each one costs and needs.
 function renderAI() {
   var box = $("aiBody");
   box.textContent = "";
@@ -201,9 +232,10 @@ function renderAI() {
   box.appendChild(modelRow);
   if (fam.provider !== "none") showModels(fam.provider, fam.model);
   if (DATA.claude.own) box.appendChild(el("p", "note", "You have your own " + DATA.claude.name + " key in Settings, so plans you draft use that (" + (DATA.claude.model || "") + ")."));
-  box.appendChild(el("p", "note", "To set up an AI, add its key to .env on the server and restart (see the README). Chat subscriptions like ChatGPT Plus or Claude Pro can’t be used by other apps; each company sells API access separately, paid per use."));
+  box.appendChild(el("p", "note", "To set up an AI, add its key to .env on the server and restart (see the README). Chat subscriptions like ChatGPT Plus or Claude Pro can’t be used by other apps; each company sells API access separately, paid per use. If you run Claude Code on the server, it can draft the plan on your Claude subscription instead: see “Drafting the plan with Claude Code” in the README. Its draft shows up here to approve."));
 }
 
+// What happens when an AI is chosen: save it, or show its model list first.
 function pickAI(p) {
   if (p === "none" || p === "anthropic") {
     saveAI(p, p === "anthropic" ? (DATA.ai.family.provider === "anthropic" && DATA.ai.family.model) || "" : "");
@@ -241,6 +273,7 @@ function showModels(p, current, saveFirst) {
   });
 }
 
+// Saves the family's AI choice on the server.
 function saveAI(p, model) {
   api("PUT", "/api/plan/ai", { provider: p, model: model }).then(function (got) {
     DATA.ai.family = got.family;
@@ -297,6 +330,7 @@ function renderDraft() {
   box.appendChild(note);
   var row = el("div", "row");
   var ready = all > 0 && finished === all;
+  // Starts making the plan, with the AI or the built-in builder, after checking with the admin.
   function start(how, button) {
     if (!ready && !confirm("Not everyone has finished their answers. Make the plan anyway?")) return;
     if (DATA.draft && !confirm("There’s already a draft waiting for approval. Replace it with a new one?")) return;
@@ -386,10 +420,37 @@ function renderReview() {
   box.appendChild(el("p", "note", "Not quite right? Discard it and make another: each one is a little different. Or change people’s About me answers first."));
 }
 
+// The household's country. Saved straight away.
+function renderCountry() {
+  var R = Appearance.REGIONS;
+  var sel = $("country");
+  if (!sel.options.length) {
+    R.order.slice().sort(function (a, b) { return R.countries[a].name.localeCompare(R.countries[b].name); }).forEach(function (id) {
+      var o = el("option", null, R.countries[id].name);
+      o.value = id;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", function () {
+      api("PUT", "/api/appearance/country", { country: sel.value }).then(function (got) {
+        Appearance.setCountry(got.country);
+        if (got.stores) Appearance.setStores(got.stores);
+        if (got.energy) Appearance.setEnergy(got.energy);
+        renderCountry();
+        renderReview();
+        status("Saved. Shopping links now use stores in " + Appearance.region().where + ".");
+      }).catch(function (e) { status(e.message, true); sel.value = Appearance.country(); });
+    });
+  }
+  sel.value = Appearance.country();
+  $("countryNote").textContent = "Plans use shop names, pack sizes and prices from " + Appearance.region().where + ". Draft a new plan after changing it.";
+}
+
+// Gets everything the page shows from the server, then draws each step.
 function load() {
   return api("GET", "/api/plan/setup").then(function (d) {
     DATA = d;
     $("app").hidden = false;
+    renderCountry();
     renderPeople();
     renderAI();
     renderDraft();
@@ -412,6 +473,8 @@ $("addForm").addEventListener("submit", function (e) {
   }).catch(function (err) { status(err.message, true); });
 });
 
+// The household's country arrives from the server just after the page opens.
+window.addEventListener("stores-changed", function () { if (DATA) renderCountry(); });
 load();
 </script>
 </body>

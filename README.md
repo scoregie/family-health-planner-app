@@ -10,21 +10,25 @@ Everything is kept **on the phone**. There are no accounts, no server and no tra
 
 ## What it does
 
+- **Your country:** 22 countries, each with its own currency, date style, energy unit and supermarkets. Plans use local shop names, pack sizes and prices.
 - **Family and plan:** add everyone the plan is for (adults and kids) and answer the **About me** questions for each person: goals, health (including medicines that affect food or exercise), allergies and diets, foods they won't eat, cooking time, kitchen, budget, exercise and support needs.
-- **The plan builder** picks meals from a built-in recipe library to fit everyone. It leaves out allergens and anything outside someone's diet, gives someone their own dinner when the family's doesn't suit them, sizes portions for each person, uses leftovers for lunches, and builds a gentle exercise plan for the equipment they have. Nothing changes until you approve the plan.
-- **Shopping:** a list for each week by supermarket aisle, with prices, **At home**, **Shop mode** (one item at a time) and links to search Coles, Woolworths and other stores. You can pin the exact product you buy.
+- **The plan builder** picks meals from a built-in recipe library to fit everyone. It leaves out allergens and anything outside someone's diet, gives someone their own dinner when the family's doesn't suit them, sizes portions for each person, uses leftovers for lunches, and builds a gentle exercise plan from a library of 94 exercises, suited to each person's equipment, injuries and health. Nothing changes until you approve the plan.
+- **Shopping:** a list for each week by supermarket aisle, with prices, **At home**, **Shop mode** (one item at a time) and links to search your country's stores (Coles and Woolworths in Australia, Tesco in the UK, and so on). You can pin the exact product you buy.
+- **Today:** today's meals, exercise and shopping for each person on one page.
 - **Meals and Exercise:** one day at a time for each person, with recipes, ticks and ratings out of 10.
+- **Exercise library:** every exercise with how-to steps. Leave out ones that don't suit you, or swap one in your plan for another of the same kind.
 - **Macros and guidelines:** each person's week compared with official healthy-eating guidelines (Australia, New Zealand, UK, Japan or Korea), in kilojoules or Calories.
 - **Progress:** weekly charts of weight, meals, food energy and exercise.
 - **Settings and backup:** light or dark, colours, fonts and text size; save a backup file and restore it on another phone.
 
-It's a planning tool, not medical advice. The app asks people to check their plan with their GP, dietitian or physio, and health notes are written as considerations to check, not instructions. Prices are rough Australian supermarket estimates.
+It's a planning tool, not medical advice. The app asks people to check their plan with their GP, dietitian or physio, and health notes are written as considerations to check, not instructions. Prices are rough local supermarket estimates.
 
 ## How it's built
 
 - [Capacitor](https://capacitorjs.com) 8 wraps the web pages in `www/` as native iOS and Android apps.
 - The pages were written for the self-hosted server and call addresses like `/api/state`. In the app, `www/local-api.js` answers those calls on the phone and keeps everything in one JSON file in the app's private storage.
-- The plan builder (`www/planbuilder.js`) and meal library (`www/library.json`) are shared with the web version. `tools/build_library.py` rebuilds the library.
+- These files are copied unchanged from the web version, so fixes there can be copied straight across: the plan builder (`planbuilder.js`), its data (`library.json`, `library-prices.json`, `exercises.json`), the countries and stores (`regions.js`), the guidelines, the About me questions and the fonts. `tools/build_library.py` rebuilds the meal library.
+- The pages (`index.html`, `settings.html` and so on) are the web version's with small changes for the app: no logins, AI or Health sync, a Backup section in Settings, and "Family and plan" instead of Plan setup.
 - The fonts are bundled in `www/fonts/`, so nothing is loaded from the internet.
 
 ## Building it yourself

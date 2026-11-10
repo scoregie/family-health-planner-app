@@ -24,7 +24,7 @@ If you tap **Save a backup**, the app makes a file with all of the above and ope
 
 ## The internet
 
-The app doesn't need the internet and doesn't send your information anywhere. If you tap a store link on the shopping list (for example "Search Coles"), it opens that store's website in your browser, and the search words (the item's name) go to that website. That's all.
+The app doesn't need the internet and doesn't send your information anywhere. If you tap a store link on the shopping list (for example "Search Coles" or "Search Tesco"), it opens that store's website in your browser, and the search words (the item's name) go to that website. That's all.
 
 ## Children
 

@@ -158,6 +158,7 @@ I = {
 D = []
 
 
+# Adds a dish to the library list (D). Used for every recipe written below.
 def dish(name, meal, cuisine, minutes, kit, per, steps, **kw):
     D.append(dict(name=name, meal=meal, cuisine=cuisine, minutes=minutes, kit=kit, per=per, steps=steps, **kw))
 
@@ -399,6 +400,33 @@ dish('Scrambled egg and cheese wrap', 'breakfast', 'Australian', 8, ['stovetop']
      [('egg', 2), ('wraps', 1), ('cheddar', 15), ('spinach', 15)],
      ['Scramble the eggs, then roll them in a wrap with the cheese and spinach.'])
 
+# Gluten-free breakfasts, so a family with a wheat or gluten allergy (or coeliac disease) has some.
+dish('Greek yoghurt with berries and banana', 'breakfast', 'Australian', 3, [],
+     [('greek yoghurt', 170), ('frozen berries', 70), ('banana', 60)],
+     ['Thaw the berries in the fridge overnight, or give them 30 seconds in the microwave.',
+      'Spoon the yoghurt into a bowl and top with the berries and sliced banana.'], texture=['soft'])
+dish('Scrambled eggs with spinach and tomato', 'breakfast', 'Australian', 10, ['stovetop'],
+     [('egg', 2), ('spinach', 30), ('tomato', 0.5), ('oil', 3)],
+     ['Wilt the spinach in a pan with the oil for a minute.', 'Pour in the beaten eggs and stir gently over low heat until just set.',
+      'Serve with the sliced tomato.'], separate=True)
+dish('Potato, capsicum and egg hash', 'breakfast', 'Australian', 20, ['stovetop'],
+     [('potato', 150), ('capsicum', 0.3), ('onion', 30), ('egg', 1), ('oil', 5)],
+     ['Dice the potato small and fry it in the oil, covered, for 10 minutes, turning now and then.',
+      'Add the chopped capsicum and onion and cook 5 minutes more until golden.',
+      'Make a gap, crack in the egg and cook it the way you like.'], separate=True)
+dish('Bean, avocado and tomato breakfast plate', 'breakfast', 'Mexican', 8, ['microwave'],
+     [('black beans', 100), ('avocado', 0.4), ('tomato', 0.5), ('corn', 40), ('lemon', 0.1)],
+     ['Warm the drained beans and corn in the microwave for a minute.',
+      'Serve with sliced avocado and tomato, and a squeeze of lemon.'], separate=True)
+dish('Creamy rice porridge with banana', 'breakfast', 'Australian', 10, ['microwave'],
+     [('rice', 40), ('milk', 200), ('banana', 60)],
+     ['Use rice cooked the day before (or cook a little extra at dinner).',
+      'Microwave the rice with the milk for 3 to 4 minutes, stirring twice, until thick and creamy.',
+      'Top with sliced banana.'], texture=['soft'])
+dish('Cottage cheese with apple and almonds', 'breakfast', 'Australian', 3, [],
+     [('cottage cheese', 120), ('apple', 120), ('almonds', 15)],
+     ['Chop the apple and roughly chop the almonds.', 'Spoon the cottage cheese into a bowl and scatter them over.'])
+
 # --- lunches ---
 dish('Chicken salad wrap', 'lunch', 'Australian', 10, ['stovetop'],
      [('chicken breast', 90), ('wraps', 1), ('lettuce', 0.1), ('tomato', 0.4), ('cheddar', 15), ('mayonnaise', 10)],
@@ -438,10 +466,39 @@ dish('Chicken, rice and vegetable lunch box', 'lunch', 'Australian', 20, ['stove
      ['Cook the rice and chicken (or use leftovers). Steam the vegetables.', 'Pack in a container with a dash of soy sauce.'],
      packable=True, separate=True)
 
+# Gluten-free lunches (no bread, wraps or pasta).
+dish('Tuna, rice and corn salad', 'lunch', 'Australian', 10, [],
+     [('tuna', 95), ('rice', 60), ('corn', 50), ('cucumber', 0.3), ('tomato', 0.5), ('lemon', 0.15), ('oil', 5)],
+     ['Use rice cooked the day before.', 'Mix it with the drained tuna and corn, and the diced cucumber and tomato.',
+      'Dress with the lemon juice and oil.'], packable=True)
+dish('Egg and potato salad', 'lunch', 'Australian', 25, ['stovetop'],
+     [('potato', 150), ('egg', 2), ('mayonnaise', 15), ('spring onion', 0.2), ('salad leaves', 30)],
+     ['Boil the diced potato for 10 to 12 minutes until tender. Hard-boil the eggs for 9 minutes.',
+      'Cool both, chop the eggs, and mix with the potato, mayonnaise and sliced spring onion.', 'Serve on the salad leaves.'],
+     packable=True, batch=True)
+dish('Chickpea, feta and cucumber salad', 'lunch', 'Greek', 10, [],
+     [('chickpeas', 120), ('feta', 30), ('cucumber', 0.3), ('tomato', 0.5), ('lemon', 0.15), ('oil', 5)],
+     ['Rinse and drain the chickpeas.', 'Mix them with the diced cucumber and tomato and crumbled feta.',
+      'Dress with the lemon juice and oil.'], packable=True)
+dish('Baked potato with beans and cheese', 'lunch', 'British', 12, ['microwave'],
+     [('potato', 250), ('baked beans', 150), ('cheddar', 20)],
+     ['Prick the potato with a fork and microwave it for 8 to 10 minutes, turning halfway, until soft.',
+      'Split it open, spoon over the warmed beans and sprinkle with grated cheese.'], texture=['soft'])
+dish('Chicken, avocado and rice bowl', 'lunch', 'Australian', 15, ['stovetop'],
+     [('chicken breast', 90), ('rice', 60), ('avocado', 0.3), ('corn', 40), ('lettuce', 0.08), ('lemon', 0.1), ('oil', 3)],
+     ['Use rice cooked the day before, and leftover chicken or a chicken breast pan-fried in the oil and sliced.',
+      'Top the rice with the chicken, shredded lettuce, corn and sliced avocado, and squeeze over the lemon.'],
+     packable=True, separate=True)
+dish('Hummus, rice crackers and vegetable sticks', 'lunch', 'Middle Eastern', 5, [],
+     [('hummus', 60), ('rice crackers', 30), ('carrot', 80), ('cucumber', 0.3), ('tomato', 0.4)],
+     ['Cut the carrot and cucumber into sticks and halve the tomato.', 'Serve with the hummus and rice crackers for dipping.'],
+     packable=True, separate=True)
+
 # --- snacks (amounts are for one person; not scaled by portion) ---
 S = []
 
 
+# Adds a snack to the snack list (S).
 def snack(what, per, kind, kids=True):
     S.append(dict(what=what, per=per, kind=kind, kids=kids))
 
@@ -577,11 +634,14 @@ DAIRY_SERVE = {'milk': 250, 'greek yoghurt': 200, 'cottage cheese': 120, 'ricott
 OILY = {'salmon'}
 
 
+# Grams of an ingredient: things counted one by one (like eggs) use the weight of one.
 def grams(key, amount):
     unit, each = I[key][3], I[key][8]
     return amount * each if unit == 'each' else amount
 
 
+# Builds the whole library: each ingredient's nutrition from the USDA files in `folder`, then each
+# dish's and snack's macros, food groups, tags and cost.
 def build(folder):
     fdc, names = load_fdc(folder)
     ingredients = {}
@@ -595,6 +655,7 @@ def build(folder):
         ingredients[key] = dict(name=name, pack=pack, unit=unit, each=each, price=price, aisle=aisle, tags=tags, kind=kind,
                                 per100=dict(p=p, c=c, f=f, kj=round(kcal * 4.184), ca=ca), source=source)
 
+    # Macros, food groups and tags for a list of [ingredient, amount] pairs.
     def nutrition(per):
         m = dict(p=0.0, c=0.0, f=0.0, kj=0.0)
         g = dict(veg=0.0, fruit=0.0, grain=0.0, protein=0.0, dairy=0.0, fv=0.0, leg=0.0, red=0.0, fish=0.0, oily=0.0, side=0.0, gc=0.0, mp=0.0, ca=0.0)
@@ -662,6 +723,7 @@ def build(folder):
         ingredients=ingredients, dishes=dishes, snacks=snacks, workouts=workouts)
 
 
+# Builds the library from the USDA folder named on the command line and saves api/library.json.
 def main():
     if len(sys.argv) < 2:
         sys.exit(__doc__)
