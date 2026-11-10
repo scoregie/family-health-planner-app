@@ -1,6 +1,6 @@
 {
   "name": "family-health-planner-app",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "private": true,
   "description": "Family Health Planner as a standalone iPhone and Android app: meals, shopping and exercise for the whole family, kept on the phone.",
   "license": "MIT",

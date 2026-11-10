@@ -2,6 +2,13 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.3.0 (2026-11-10)
+
+Matches web v1.5.0:
+
+- **New question: "Which days does work or school provide lunch?"** Plans don't pack a lunch on those days ("School provides lunch" for children, "Work provides lunch" for adults).
+- **"Pool" is now "Pool at home" or "Public pool or swim centre".** Older "Pool" answers still count.
+
 ## v0.2.4 (2026-11-10)
 
 Matches web v1.4.5: **snacks are shuffled**, so people and plans get a variety instead of the first few in the library, with snacks matching foods someone loves first. **Rebuild** gives new ones.
