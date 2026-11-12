@@ -2,6 +2,20 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.5.0 (2026-11-12)
+
+Catches up with the web version's changes since v1.8.0:
+
+- **New page: Current food (in More).** List the food already at home, sorted into Pantry, Fridge, Freezer and Other, adding and removing one thing at a time. It replaces the "What's already in your kitchen?" box on Family and plan, which now shows how many things are listed and links to the page. A list typed there before is sorted into the four places the first time it is opened.
+  - Where food is kept changes how long it counts: freezer food for the whole 4 weeks, fridge food for as long as it usually keeps, and something from the freezer aisle kept in the fridge for the first week.
+  - Fixed: a food on the list could make the plan buy more of it. The builder now stops preferring a food once the meals have used it up.
+- **Supplements in About me.** The Health section asks which supplements people already take. An adult's protein powder is counted in their snacks as "Protein shake (1 scoop of your own powder)"; the others add considerations pointing to their GP or pharmacist. For anyone under 18 they are noted and not counted. The plan doesn't suggest starting, stopping or changing any of them.
+- **Fasting people already do.** A new About me section covers a daily fast or eating window, set fast days each week, sunrise-to-sunset weeks, and foods given up. Daily fasts change when meals are suggested, not how much food there is; meals someone goes without on a fast day show as "Fast day: no breakfast or lunch." and aren't ticked, rated, counted or shopped for.
+- **Suggested eating times** for people who asked for eating reminders.
+- Soups count as a mixed texture, a condition typed in "other" reaches the exercise considerations, and written About me answers are listed in the draft's note so they can be checked against the plan.
+
+Not in the app (web only): AI-written plans and the check that they use Current food.
+
 ## v0.4.0 (2026-11-10)
 
 Catches up with web v1.5.2 to v1.8.0:
