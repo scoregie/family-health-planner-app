@@ -30,7 +30,8 @@
       exLog: [],           // exercise sessions ticked
       measurements: [],    // [{id, person, date, kind, value, source}]
       settings: { appearance: {}, stores: [], energy: "", pins: {} },
-      kitchen: [],         // food already at home, as the lines typed on Family and plan
+      food: null,          // Current food: {pantry: [], fridge: [], freezer: [], other: []}, each a list of lines
+      kitchen: [],         // the older single kitchen list (sorted into "food" the first time it is read)
       steps: {},           // person -> {"food they were offered": "tried" | "liked" | "not yet"}
       nextId: 1,
     };
@@ -156,6 +157,49 @@
       d.notes.forEach(function (note) { if (notes.length < 20) notes.push({ dish: d.dish, note: note.slice(0, 200) }); });
     });
     return { rated: rated, notes: notes };
+  }
+
+  // ---------- Current food ----------
+
+  // The places food is kept, in the order the Current food page shows them.
+  var FOOD_PLACES = ["pantry", "fridge", "freezer", "other"];
+
+  // One item as it is saved: no angle brackets, no extra spaces, at most 80 characters.
+  function tidyFood(text) {
+    return String(text == null ? "" : text).replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+  }
+
+  // The saved lists, {pantry: [], fridge: [], freezer: [], other: []}. The first time, an older
+  // kitchen list (one list of lines) is sorted into places. `pb` is the plan builder.
+  function currentFood(pb) {
+    if (!store.food || typeof store.food !== "object") {
+      var food = {};
+      FOOD_PLACES.forEach(function (place) { food[place] = []; });
+      (Array.isArray(store.kitchen) ? store.kitchen : []).map(tidyFood).filter(Boolean)
+        .forEach(function (line) { food[pb.kitchenPlace(line)].push(line); });
+      store.food = food;
+      store.kitchen = [];
+    }
+    FOOD_PLACES.forEach(function (place) { if (!Array.isArray(store.food[place])) store.food[place] = []; });
+    return store.food;
+  }
+
+  // Everything on the lists as [{text, place}], for the plan builder: where food is kept changes
+  // how long it keeps (freezer food lasts the whole plan).
+  function foodItems(pb) {
+    var food = currentFood(pb);
+    var out = [];
+    FOOD_PLACES.forEach(function (place) { food[place].forEach(function (text) { out.push({ text: text, place: place }); }); });
+    return out;
+  }
+
+  // One entry per thing on Current food (or on an older kitchen list not yet sorted), so Family
+  // and plan can say how many there are.
+  function foodCount() {
+    if (!store.food || typeof store.food !== "object") return (store.kitchen || []).slice();
+    var out = [];
+    FOOD_PLACES.forEach(function (place) { out = out.concat(store.food[place] || []); });
+    return out;
   }
 
   // What the family thought of meals they've rated: {"lower-case dish name": average out of 10}.
@@ -712,7 +756,7 @@
         ai: { family: { provider: "none" }, keys: { anthropic: false, openai: false, gemini: false, ollama: false }, providers: {} },
         job: null,
         draft: store.draft ? draftPreview(store.draft) : null,
-        kitchen: store.kitchen || [],
+        kitchen: foodCount(),   // just how many things are on Current food, for the count on this page
         isExample: !store.plan,
       };
     }
@@ -720,23 +764,40 @@
       if (!store.people.length) fail(400, "Add the people in your family first.");
       return builder().then(function (pb) {
         var people = household();
-        var built = pb.build(people, { seed: Date.now(), country: country(), locale: region().locale, pantry: store.kitchen || [], rated: dishRatings() });
+        var built = pb.build(people, { seed: Date.now(), country: country(), locale: region().locale, pantry: foodItems(pb), rated: dishRatings() });
         var notes = built.notesForAdmin;
         store.draft = { id: newId(), title: "New 4-week plan for the family", created_at: Date.now(),
           plan: built.plan, notes: (Array.isArray(notes) ? notes.join(" ") : notes) || null };
         return { ok: true, done: true };
       });
     }
-    // The kitchen list: food already at home, one thing per line. The next plan uses it first.
-    if (path === "/api/plan/kitchen" && method === "PUT") {
-      if (!Array.isArray(b.items)) fail(400, "bad request");
-      var items = b.items.filter(function (x) { return typeof x === "string"; })
-        .map(function (x) { return x.replace(/[<>]/g, "").trim().slice(0, 80); }).filter(Boolean).slice(0, 200);
-      store.kitchen = items;
-      // Say what the plan builder understands, so they can reword anything it missed.
+    // Current food: what the family already has, in pantry, fridge, freezer and other. One thing
+    // is added or removed at a time; {place} alone on a DELETE empties that place.
+    if (path === "/api/food") {
       return builder().then(function (pb) {
-        var read = pb.kitchenStock(items);
-        return { ok: true, kitchen: items, counted: read.counted, unknown: read.unknown };
+        var food = currentFood(pb);
+        if (method !== "GET") {
+          if (method !== "POST" && method !== "DELETE") fail(405, "not allowed");
+          var place = String(b.place || "");
+          if (FOOD_PLACES.indexOf(place) < 0) fail(400, "Choose pantry, fridge, freezer or other.");
+          var text = tidyFood(b.text);
+          if (method === "POST") {
+            if (!text) fail(400, "Type what the food is, like “rice 2 kg”.");
+            if (food[place].length >= 100) fail(400, "That list is full. Remove something first.");
+            // The same thing twice in one place is left as one.
+            if (!food[place].some(function (x) { return x.toLowerCase() === text.toLowerCase(); })) food[place].push(text);
+          } else if (b.text === undefined) {
+            food[place] = [];
+          } else {
+            food[place] = food[place].filter(function (x) { return x !== text; });
+          }
+        }
+        // Each item says whether the plan builder has meals that use it ("known").
+        var out = {};
+        FOOD_PLACES.forEach(function (where) {
+          out[where] = food[where].map(function (line) { return { text: line, known: pb.kitchenStock([line]).unknown.length === 0 }; });
+        });
+        return { food: out, places: FOOD_PLACES };
       });
     }
     // Small steps: how a new food went for someone ("tried", "liked", "not yet", or "" to clear it).

@@ -4313,6 +4313,7 @@
    ],
    "leftovers": true,
    "texture": [
+    "mixed",
     "soft"
    ],
    "batch": true,
@@ -7026,6 +7027,7 @@
    "packable": true,
    "batch": true,
    "texture": [
+    "mixed",
     "soft"
    ],
    "kid": "Blend it smooth if lumps are a problem.",
