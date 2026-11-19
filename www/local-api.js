@@ -118,8 +118,10 @@
   // the first time it's needed, so its names can't clash with the page's. It gets its data files
   // (meals, exercises, local prices) from here, as the phone has no require().
   // It is given the health targets (healthtargets.js, also the web version's file) as
-  // window.HealthTargets, which is where it looks for them when there is no require().
+  // window.HealthTargets, and the cardio levels (cardio.js, also the web's) as window.Cardio,
+  // which is where it looks for them when there is no require().
   var BUILDER = null;
+  var CARDIO = null;    // cardio levels and the "How did that feel?" rules (cardio.js)
   var TARGETS = null;   // the vegetable and fruit serves to aim for, and how a plan measures up
   function builder() {
     if (BUILDER) return Promise.resolve(BUILDER);
@@ -127,12 +129,16 @@
       realFetch("planbuilder.js").then(function (r) { return r.text(); }),
       json("library.json"), json("exercises.json"), json("library-prices.json"),
       realFetch("healthtargets.js").then(function (r) { return r.text(); }),
+      realFetch("cardio.js").then(function (r) { return r.text(); }),
     ]).then(function (got) {
+      var cardio = { exports: {} };
+      new Function("module", got[5])(cardio);
+      CARDIO = cardio.exports;
       var targets = { exports: {} };
       new Function("module", got[4])(targets);
       TARGETS = targets.exports;
       var mod = { exports: {} };
-      new Function("module", "window", got[0])(mod, { HealthTargets: TARGETS });
+      new Function("module", "window", got[0])(mod, { HealthTargets: TARGETS, Cardio: CARDIO });
       mod.exports.useData({ library: got[1], exercises: got[2], prices: got[3] });
       BUILDER = mod.exports;
       return BUILDER;
@@ -249,9 +255,26 @@
         feedback: feedbackFor(person),
         measured: measuredFor(person),
         tried: triedFor(person),
+        cardio: cardioSaved(person),
       };
     });
   }
+  // What is saved about how someone's cardio sessions felt ({base, offset, feels}), or null.
+  function cardioSaved(person) {
+    return (store.settings.cardio || {})[person] || null;
+  }
+
+  // Someone's cardio level now, for the Exercise tab (the same as the web's exercises.js):
+  // the level, which sessions they've said how felt (`felt`), and the top level.
+  function cardioFor(person, pb) {
+    var profile = store.profiles[person];
+    var saved = cardioSaved(person);
+    var now = pb.cardioNow((profile && profile.answers) || {}, saved, measuredFor(person));
+    var felt = {};
+    ((saved && saved.feels) || []).forEach(function (f) { felt[f.id] = f.feel; });
+    return Object.assign(now, { felt: felt, top: CARDIO.TOP });
+  }
+
   function personKeys() {
     return store.people.map(function (p) { return toKey(p.name); });
   }
@@ -855,6 +878,24 @@
       return builder().then(function (pb) {
         var profile = store.profiles[person];
         return { exercises: pb.EXERCISES, fits: pb.exerciseFits({ answers: (profile && profile.answers) || {}, avoid: [] }), avoid: avoidList(person) };
+      });
+    }
+    if (path === "/api/exercises/cardio" && method === "GET") {
+      if (personKeys().indexOf(person) < 0) fail(404, "unknown person");
+      return builder().then(function (pb) { return cardioFor(person, pb); });
+    }
+    // "How did that feel?" after a cardio session: {id: "plan-2026-11|1|Mon-cardio", feel}.
+    if (path === "/api/exercises/cardio" && method === "POST") {
+      if (personKeys().indexOf(person) < 0) fail(404, "unknown person");
+      var id = String(b.id || "");
+      if (["easy", "right", "hard"].indexOf(b.feel) < 0 || !/^([A-Za-z0-9-]{1,40}\|)?\d{1,2}\|[A-Za-z]{3}-[a-z]{1,12}$/.test(id)) fail(400, "bad request");
+      return builder().then(function (pb) {
+        var answers = (store.profiles[person] && store.profiles[person].answers) || {};
+        var before = pb.cardioNow(answers, cardioSaved(person), measuredFor(person));
+        var after = CARDIO.feelAfter(answers.cardio_level, cardioSaved(person), id, b.feel, before.limit, before.guess, before.steady);
+        store.settings.cardio = Object.assign({}, store.settings.cardio);
+        store.settings.cardio[person] = after.saved;
+        return Object.assign(cardioFor(person, pb), { moved: after.moved });
       });
     }
     if (path === "/api/exercises/avoid" && method === "PUT") {

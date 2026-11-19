@@ -2,6 +2,16 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.6.0 (2026-11-19)
+
+Cardio levels from the web version (v1.10.1), and its newer plan builder:
+
+- **Cardio starts at your level.** About me (Exercise) asks "For cardio, which is closest to what you can do now?", from "A 20-minute walk leaves me puffed" to "I run, ride or swim hard 3 or more times a week". The plan builder writes cardio at that level (easy walk, brisk walk, hills, walk-jog, jog, run; easy, steady or faster swims and rides), and each session says how hard it should feel.
+- **"How did that feel?" after each cardio session.** Tick a cardio session on Today or Exercise and choose Too easy, About right or Too hard. Two "Too easy" in a row step your cardio up a level; one "Too hard" steps it back. Each session counts once, and every cardio session shows "At your level: ..." straight away, without making a new plan.
+  - A heart condition or pregnancy keeps cardio at a steady level, with a note to check with your GP or midwife before going harder. Low energy or chronic pain starts steady and steps up after three "Too easy" in a row. A sore foot, ankle, knee or hip keeps walks as walks.
+- **Allergies first.** When nothing in the meal library suits someone's allergies or diet for a meal, the plan now says "Your own choice" instead of giving them the family's meal. Crumbed fish, and fish and chips, are marked as containing egg.
+- The plan builder's other fixes from the web: weeks with 3 strength days have all the cardio they promise, the strength-day snack note only names that week's snacks, and Current food makes the shopping cheaper for a family with a budget.
+
 ## v0.5.0 (2026-11-12)
 
 Catches up with the web version's changes since v1.8.0:
