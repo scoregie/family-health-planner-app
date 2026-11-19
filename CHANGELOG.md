@@ -2,18 +2,9 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
-## Unreleased
-
-- **Progress counts meals from older plans.** A meal whose plan gave its energy only in kcal
-  counted as 0 kJ eaten on Progress; it now counts, the same as on the Meals tab.
-- Behind the scenes: the app's server (`local-api.js`) now uses the web version's own rules for
-  people's keys, Current food, planned meals, exercise swaps and energy (`sharedrules.js` and
-  `energy.js`) instead of its own copies. Swapping an exercise in a shared workout is no longer
-  checked against one person's About me answers, the same as the web.
-
 ## v0.7.0 (2026-11-19)
 
-Catches up with the web version (v1.10.1, and two changes waiting to be released there), and now
+Catches up with the web version (v1.11.0), and now
 uses the web's pages unchanged:
 
 - **Current food: an Edit button on every item**, to fix the wording or move it to another place.
@@ -31,6 +22,12 @@ uses the web's pages unchanged:
 - Progress leaves out the steps, workout and Lose It charts and columns the app can't fill yet.
 - Behind the scenes: the pages are the web version's own files, and `tools/port-from-web.sh`
   copies them across, so future updates from the web are a copy rather than a merge.
+- **Progress counts meals from older plans.** A meal whose plan gave its energy only in kcal
+  counted as 0 kJ eaten on Progress; it now counts, the same as on the Meals tab.
+- Behind the scenes: the app's server (`local-api.js`) now uses the web version's own rules for
+  people's keys, Current food, planned meals, exercise swaps and energy (`sharedrules.js` and
+  `energy.js`) instead of its own copies. Swapping an exercise in a shared workout is no longer
+  checked against one person's About me answers, the same as the web.
 
 ## v0.6.0 (2026-11-19)
 
