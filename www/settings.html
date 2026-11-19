@@ -11,6 +11,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script src="local-api.js"></script>
 <script src="edition.js"></script>
+<script src="page.js"></script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f5f4">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121214">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -226,50 +227,6 @@ var HOUSE = A.house();      // the household's choices (admins edit a copy of th
 var IS_ADMIN = false;
 var SYMBOLS = ["🛒", "🥗", "🍎", "🥕", "🍲", "🥑", "🍳", "🥦", "🍽️", "🏃", "💪", "❤️"];
 var ICON = { symbol: "🛒", text: "", colour: "green" };
-
-function $(id) {
-  return document.getElementById(id);
-}
-
-// Makes a new page element (like a paragraph or button), with an optional CSS class and text.
-function el(tag, cls, txt) {
-  var e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (txt != null) e.textContent = txt;
-  return e;
-}
-
-// Asks the server for something (or sends it a change) and waits for the answer. Returns a
-// "promise": .then(...) runs with the answer, .catch(...) with the error message if it failed.
-function api(method, url, body) {
-  return fetch(url, {
-    method: method,
-    cache: "no-store",
-    headers: { "X-Requested-With": "app", "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  }).then(function (response) {
-    return response.json().catch(function () { return {}; }).then(function (data) {
-      if (!response.ok) throw new Error(data.error || "The server said " + response.status);
-      return data;
-    });
-  });
-}
-
-// Shows a short message at the bottom of the screen (red for errors). The box stays on the page
-// and is filled a moment after it is cleared, so screen readers read each new message. Other
-// messages go after 5 seconds; errors stay until they are tapped or the next message comes.
-function status(text, isError) {
-  var s = $("status");
-  clearTimeout(status.timer);
-  clearTimeout(status.fill);
-  s.className = "status" + (isError ? " err" : "");
-  s.textContent = "";
-  s.onclick = function () { s.textContent = ""; };
-  status.fill = setTimeout(function () {
-    s.textContent = text;
-    if (!isError) status.timer = setTimeout(function () { s.textContent = ""; }, 5000);
-  }, 50);
-}
 
 // True if the page is showing in dark mode (chosen, or matching the device).
 function isDark() {
@@ -760,8 +717,8 @@ function libPost(path, body, done) {
   }).catch(function (e) { status(e.message, true); renderLibrary(); });
 }
 
-// Energy in kJ as text, like "2,760 kJ".
-function kjOf(m) { return m ? Math.round(m.kj).toLocaleString(Appearance.locale()) + " kJ" : ""; }
+// A serve's energy as text in the family's chosen unit, like "2,760 kJ" or "660 kcal".
+function energyLabel(m) { return m ? Appearance.energyText(m.kj) : ""; }
 
 // One waiting addition, folded: what it is, then its ingredients and steps (or how-to).
 function pendingItem(p) {
@@ -769,8 +726,8 @@ function pendingItem(p) {
   var sum = el("summary");
   var it = p.item;
   var title = p.kind === "dish" ? it.name : p.kind === "snack" ? it.what : it.name;
-  var meta = p.kind === "dish" ? cap(it.meal) + " · " + it.cuisine + " · " + it.minutes + " min · " + kjOf(it.macros) + " · about " + Appearance.money(it.cost, "AUD") + " a serve"
-    : p.kind === "snack" ? "Snack · " + kjOf(it.macros)
+  var meta = p.kind === "dish" ? cap(it.meal) + " · " + it.cuisine + " · " + it.minutes + " min · " + energyLabel(it.macros) + " · about " + Appearance.money(it.cost, "AUD") + " a serve"
+    : p.kind === "snack" ? "Snack · " + energyLabel(it.macros)
     : "Exercise · " + it.type + " · " + it.equipment + " · level " + it.level;
   sum.appendChild(el("b", null, title));
   sum.appendChild(el("span", null, meta));

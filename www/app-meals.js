@@ -352,9 +352,7 @@ function macrosOf(dish) {
   if (!v || typeof v !== "object") return null;
   var p = +v.p || 0, c = +v.c || 0, f = +v.f || 0;
   if (!p && !c && !f && !v.kj && !v.kcal) return null;
-  // Energy in kJ from the factors on Australian food labels (FSANZ): 17 kJ/g protein and carbs, 37 kJ/g fat.
-  var kj = +v.kj || (+v.kcal ? v.kcal * 4.184 : 17 * p + 17 * c + 37 * f);
-  return { p: p, c: c, f: f, kj: kj };
+  return { p: p, c: c, f: f, kj: Energy.kj(v) };   // site/energy.js
 }
 
 // The food groups in one average serve of a dish, from the plan's "groups" block (made by
@@ -784,11 +782,7 @@ function smallStepsBlock(person) {
     b.onclick = function () {
       // Tapping the chosen answer again clears it.
       var now = (stepsTried[key] || {})[step.food] === option[0] ? "" : option[0];
-      fetch("/api/steps?person=" + encodeURIComponent(key), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Requested-With": "app" },
-        body: JSON.stringify({ food: step.food, result: now }),
-      }).then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      api("PUT", "/api/steps?person=" + encodeURIComponent(key), { food: step.food, result: now })
         .then(function (d) { stepsTried[key] = d.tried; show(); })
         .catch(function () { said.textContent = "That didn’t save. Only they or an admin can tick this."; });
     };
@@ -798,8 +792,8 @@ function smallStepsBlock(person) {
   wrap.appendChild(said);
   if (stepsTried[key]) show();
   else {
-    fetch("/api/steps?person=" + encodeURIComponent(key), { cache: "no-store" })
-      .then(function (r) { return r.ok ? r.json() : { tried: {} }; })
+    api("GET", "/api/steps?person=" + encodeURIComponent(key))
+      .catch(function () { return { tried: {} }; })
       .then(function (d) { stepsTried[key] = d.tried || {}; show(); })
       .catch(function () {});
   }

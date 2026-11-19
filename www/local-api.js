@@ -79,7 +79,14 @@ window.PHONE = { app: true };
     return writing;
   }
 
-  var ready = load().then(function (saved) {
+  // The rules the web server follows too (sharedrules.js) and the energy rule (energy.js): the web
+  // version's own files, loaded before the first request is answered.
+  var RULES = null;
+  var ENERGY = null;
+  var ready = Promise.all([load(), shared("sharedrules.js"), shared("energy.js")]).then(function (got) {
+    var saved = got[0];
+    RULES = got[1];
+    ENERGY = got[2];
     store = Object.assign(emptyStore(), saved || {});
     store.settings = Object.assign(emptyStore().settings, store.settings || {});
     store.state = Object.assign(emptyStore().state, store.state || {});
@@ -89,21 +96,18 @@ window.PHONE = { app: true };
   // Helpers
   // ---------------------------------------------------------------------------
 
-  // A person's key from their name: "Alex Smith" becomes "alex-smith". A name with no a-z or 0-9
-  // (like "ゆき") gets "p-" and a short code made from it. The same as the web version's toKey.
-  function toKey(name) {
-    var key = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    if (/[a-z0-9]/.test(key) || !/[\p{L}\p{N}]/u.test(String(name || ""))) return key;
-    var h = 0x811c9dc5;
-    var s = String(name).trim();
-    for (var i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
-    return "p-" + ("0000000" + h.toString(16)).slice(-8);
+  // Loads one of the web version's shared files (written for Node's require()) and gives back
+  // what it exports.
+  function shared(file) {
+    return realFetch(file).then(function (r) { return r.text(); }).then(function (src) {
+      var holder = { exports: {} };
+      new Function("module", src)(holder);
+      return holder.exports;
+    });
   }
+
   function isObj(v) {
     return v && typeof v === "object" && !Array.isArray(v);
-  }
-  function dishKey(name) {
-    return String(name || "").replace(/\s*\(packed\)\s*$/i, "").trim().toLowerCase();
   }
   function newId() {
     return store.nextId++;
@@ -178,28 +182,18 @@ window.PHONE = { app: true };
 
   // ---------- Current food ----------
 
-  // The places food is kept, in the order the Current food page shows them (the same as the
-  // web's api/currentfood.js).
-  var FOOD_PLACES = ["pantry", "spices", "fridge", "freezer", "bench", "other"];
-  var CHOOSE_PLACE = "Choose pantry, spices and seasonings, fridge, freezer, fruit bowl and bench, or other.";
-
-  // One item as it is saved: no angle brackets, no extra spaces, at most 80 characters.
-  function tidyFood(text) {
-    return String(text == null ? "" : text).replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
-  }
-
   // The saved lists, {pantry: [], spices: [], fridge: [], ...}. The first time, an older
   // kitchen list (one list of lines) is sorted into places. `pb` is the plan builder.
   function currentFood(pb) {
     if (!store.food || typeof store.food !== "object") {
       var food = {};
-      FOOD_PLACES.forEach(function (place) { food[place] = []; });
-      (Array.isArray(store.kitchen) ? store.kitchen : []).map(tidyFood).filter(Boolean)
+      RULES.FOOD.PLACES.forEach(function (place) { food[place] = []; });
+      (Array.isArray(store.kitchen) ? store.kitchen : []).map(RULES.tidyFood).filter(Boolean)
         .forEach(function (line) { food[pb.kitchenPlace(line)].push(line); });
       store.food = food;
       store.kitchen = [];
     }
-    FOOD_PLACES.forEach(function (place) { if (!Array.isArray(store.food[place])) store.food[place] = []; });
+    RULES.FOOD.PLACES.forEach(function (place) { if (!Array.isArray(store.food[place])) store.food[place] = []; });
     return store.food;
   }
 
@@ -208,27 +202,8 @@ window.PHONE = { app: true };
   function foodItems(pb) {
     var food = currentFood(pb);
     var out = [];
-    FOOD_PLACES.forEach(function (place) { food[place].forEach(function (text) { out.push({ text: text, place: place }); }); });
+    RULES.FOOD.PLACES.forEach(function (place) { food[place].forEach(function (text) { out.push({ text: text, place: place }); }); });
     return out;
-  }
-
-  // Changes one item: `text` in `place` becomes `to`, in `toPlace`, keeping its spot in the list
-  // (the same as the web's change() in api/currentfood.js). Gives back an error message, or "".
-  function changeFood(food, place, text, to, toPlace) {
-    var at = food[place].indexOf(text);
-    if (at < 0) return "That isn’t on the list any more.";
-    if (!to) return "Type what the food is, like “rice 2 kg”.";
-    var same = function (x) { return x.toLowerCase() === to.toLowerCase(); };
-    if (toPlace === place) {
-      // If the new wording is already on this list, the two become one.
-      if (food[place].some(function (x, i) { return i !== at && same(x); })) food[place].splice(at, 1);
-      else food[place][at] = to;
-      return "";
-    }
-    if (!food[toPlace].some(same) && food[toPlace].length >= 100) return "That list is full. Remove something first.";
-    food[place].splice(at, 1);
-    if (!food[toPlace].some(same)) food[toPlace].push(to);
-    return "";
   }
 
   // One entry per thing on Current food (or on an older kitchen list not yet sorted), so Family
@@ -236,7 +211,7 @@ window.PHONE = { app: true };
   function foodCount() {
     if (!store.food || typeof store.food !== "object") return (store.kitchen || []).slice();
     var out = [];
-    FOOD_PLACES.forEach(function (place) { out = out.concat(store.food[place] || []); });
+    RULES.FOOD.PLACES.forEach(function (place) { out = out.concat(store.food[place] || []); });
     return out;
   }
 
@@ -273,7 +248,7 @@ window.PHONE = { app: true };
   // The household with each person's answers, in the shape the plan builder expects.
   function household() {
     return store.people.map(function (p) {
-      var person = toKey(p.name);
+      var person = RULES.toKey(p.name);
       var profile = store.profiles[person];
       var answers = (profile && profile.answers) || {};
       return {
@@ -308,10 +283,10 @@ window.PHONE = { app: true };
   }
 
   function personKeys() {
-    return store.people.map(function (p) { return toKey(p.name); });
+    return store.people.map(function (p) { return RULES.toKey(p.name); });
   }
   function firstPerson() {
-    return store.people.length ? toKey(store.people[0].name) : "you";
+    return store.people.length ? RULES.toKey(store.people[0].name) : "you";
   }
 
   function cleanAnswers(answers, q) {
@@ -367,32 +342,12 @@ window.PHONE = { app: true };
   // Meal and exercise history (the same rules as the server's database)
   // ---------------------------------------------------------------------------
 
-  function planKeyFor(plan, person) {
-    var block = (plan && plan.people) || {};
-    return Object.keys(block).filter(function (k) { return block[k] && block[k].name && toKey(block[k].name) === person; })[0] || null;
-  }
-
-  function plannedDish(plan, weekIndex, dayName, slot, planKey) {
-    var week = plan.weeks[weekIndex];
-    var day = week && (week.meals || []).filter(function (d) { return d.day === dayName; })[0];
-    if (!day) return null;
-    var p = planKey ? (plan.people || {})[planKey] : null;
-    var school = p && p.weekday && p.weekday[dayName];
-    var dish = slot === "School snack" ? null : day[slot.toLowerCase()];
-    if (slot === "Breakfast" && p && p.breakfast) dish = p.breakfast;
-    if (slot === "Lunch" && school && school.lunch) dish = school.lunch;
-    if (slot === "School snack" && school) dish = school.snack;
-    var own = planKey && day.people && day.people[planKey];
-    if (own && own[slot.toLowerCase()]) dish = own[slot.toLowerCase()];
-    return dish || null;
-  }
-
   function syncMeals(person, eaten, ratings) {
     var plan = store.plan;
     if (!plan || !Array.isArray(plan.weeks)) return;
     var planId = String(plan.id || "default");
     var roundId = store.state.epoch || 0;
-    var planKey = planKeyFor(plan, person);
+    var planKey = RULES.planKeyFor(plan, person);
     var now = Date.now();
     var current = {};
     function slotFor(week, id) {
@@ -417,7 +372,7 @@ window.PHONE = { app: true };
       var week = plan.weeks[row.week];
       if (!week) return;
       var rating = row.rating || {};
-      var planned = rating.t || plannedDish(plan, row.week, row.day, row.slot, planKey);
+      var planned = rating.t || RULES.plannedDish(plan, row.week, row.day, row.slot, planKey);
       var dish = planned ? String(planned).replace(/\s*\(packed\)\s*$/i, "").trim() : null;
       store.mealLog.push({
         person: person, plan_id: planId, round: roundId, week: row.week, week_name: week.name || null,
@@ -425,7 +380,7 @@ window.PHONE = { app: true };
         eaten_at: row.eaten ? (firstEaten[key] || now) : null,
         score: Number.isInteger(rating.s) ? rating.s : null,
         note: typeof rating.n === "string" && rating.n.trim() ? rating.n : null,
-        macros: dish && plan.macros ? (plan.macros[dish] || plan.macros[dishKey(dish)] || null) : null,
+        macros: dish && plan.macros ? (plan.macros[dish] || plan.macros[RULES.dishKey(dish)] || null) : null,
         updated_at: now,
       });
     });
@@ -436,7 +391,7 @@ window.PHONE = { app: true };
     if (!plan || !Array.isArray(plan.weeks)) return;
     var planId = String(plan.id || "default");
     var roundId = store.state.epoch || 0;
-    var planKey = planKeyFor(plan, person);
+    var planKey = RULES.planKeyFor(plan, person);
     var now = Date.now();
     var current = {};
     Object.keys(ticks || {}).forEach(function (week) {
@@ -473,7 +428,6 @@ window.PHONE = { app: true };
   function mondayOf(date) { var d = new Date(date + "T12:00:00Z"); return addDays(date, -((d.getUTCDay() + 6) % 7)); }
   function average(list) { return list.length ? list.reduce(function (a, b) { return a + b; }, 0) / list.length : null; }
   function round(n, places) { if (n === null || n === undefined) return null; var f = Math.pow(10, places); return Math.round(n * f) / f; }
-  function kjOf(m) { return 17 * (m.p || 0) + 17 * (m.c || 0) + 37 * (m.f || 0); }
   var PREFER = { weight: ["manual", "apple-health", "health-connect"], steps: ["apple-health", "health-connect", "manual"] };
 
   function summary(person, weeks) {
@@ -505,7 +459,7 @@ window.PHONE = { app: true };
       Object.keys(byKind[kind] || {}).forEach(function (date) { var w = weekOf(date); if (w) w[kind] += byKind[kind][date].value; });
     });
     var plan = store.plan || {};
-    var planKey = planKeyFor(plan, person);
+    var planKey = RULES.planKeyFor(plan, person);
     var portion = Number(plan.people && plan.people[planKey] && plan.people[planKey].portion) || 1;
     var since = new Date(firstWeek + "T00:00:00").getTime() - DAY;
     store.mealLog.forEach(function (m) {
@@ -516,7 +470,7 @@ window.PHONE = { app: true };
         if (w) {
           w.meals++;
           if (m.macros) {
-            w.plan_kj[date] = (w.plan_kj[date] || 0) + kjOf(m.macros) * portion;
+            w.plan_kj[date] = (w.plan_kj[date] || 0) + ENERGY.kj(m.macros) * portion;
             w.plan_protein[date] = (w.plan_protein[date] || 0) + (m.macros.p || 0) * portion;
           }
         }
@@ -567,38 +521,24 @@ window.PHONE = { app: true };
     store.settings.avoid[person] = list;
     return list;
   }
-  // The library exercise a workout line is about ("Warm-up: March on the spot (5 minutes): ..."), or null.
-  function matchExercise(exercises, line) {
-    var name = String(line || "").replace(/^(warm-up|cool-down)\s*:\s*/i, "").split(/\s*[(:]/)[0].trim().toLowerCase();
-    if (!name) return null;
-    return exercises.filter(function (e) { return e.name.toLowerCase() === name; })[0]
-      || exercises.filter(function (e) { return name.indexOf(e.name.toLowerCase()) === 0 || e.name.toLowerCase().indexOf(name) === 0; })[0] || null;
-  }
-  // Swaps line `item` of one of a person's workouts for exercise `to` (the web's POST /api/exercises/swap).
+  // Swaps line `item` of one of a person's workouts for exercise `to` (the web's POST
+  // /api/exercises/swap, with the same checks from sharedrules.js). Shared workouts aren't checked
+  // against one person's About me answers.
   function swapExercise(person, b, pb) {
-    var exercises = pb.EXERCISES;
-    var to = exercises.filter(function (e) { return e.id === b.to; })[0];
-    if (!to) fail(400, "unknown exercise");
     var plan = store.plan;
     var ex = plan && plan.exercise;
     if (!ex) fail(404, "The plan has no exercise section.");
-    var target = Array.isArray(ex.workouts) ? ex : ex[planKeyFor(plan, person)];
-    var workout = target && Array.isArray(target.workouts) ? target.workouts.filter(function (w) { return w && w.name === b.workout; })[0] : null;
-    var index = Number(b.item);
-    if (!workout || !Array.isArray(workout.items) || !Number.isInteger(index) || index < 0 || index >= workout.items.length) {
-      fail(409, "That workout has changed. Go back and try again.");
+    var sharedWorkouts = Array.isArray(ex.workouts);
+    var target = sharedWorkouts ? ex : ex[RULES.planKeyFor(plan, person)];
+    var suits = null;
+    if (!sharedWorkouts) {
+      var profile = store.profiles[person];
+      suits = pb.exerciseFits({ answers: (profile && profile.answers) || {}, avoid: avoidList(person) });
     }
-    var old = matchExercise(exercises, workout.items[index]);
-    if (!old) fail(400, "That line isn’t an exercise from the library, so it can’t be swapped here.");
-    var near = { lunge: "squat", squat: "lunge" };
-    if (old.type !== to.type && near[old.type] !== to.type) fail(400, "Pick an exercise of the same kind.");
-    var profile = store.profiles[person];
-    var fits = pb.exerciseFits({ answers: (profile && profile.answers) || {}, avoid: avoidList(person) });
-    if (fits.indexOf(to.id) < 0) fail(400, "That exercise doesn’t suit their About me answers (equipment, injuries or health), or it’s on their leave-out list. Pick another.");
-    var start = (/^(warm-up|cool-down)\s*:\s*/i.exec(workout.items[index]) || [""])[0];
-    workout.items[index] = start + to.name + " (" + to.dose + "): " + to.how;
-    if (b.avoid && old.id !== to.id) setAvoid(person, old.id, true);
-    return { ok: true, line: workout.items[index] };
+    var done = RULES.swapExercise(target, b, pb.EXERCISES, suits);
+    if (done.error) fail(done.code, done.error);
+    if (b.avoid && done.old.id !== b.to) setAvoid(person, done.old.id, true);
+    return { ok: true, line: done.line };
   }
 
   // ---------------------------------------------------------------------------
@@ -782,21 +722,21 @@ window.PHONE = { app: true };
     if (path === "/api/family/person" && method === "POST") {
       var name = String(b.name || "").trim().slice(0, 40);
       if (!/[\p{L}\p{N}]/u.test(name)) fail(400, "Enter a name with at least one letter or number.");
-      if (personKeys().indexOf(toKey(name)) > -1) fail(400, "There’s already someone called " + name + ".");
+      if (personKeys().indexOf(RULES.toKey(name)) > -1) fail(400, "There’s already someone called " + name + ".");
       if (store.people.length >= 12) fail(400, "That’s the most people one plan can hold.");
       var portion = Math.min(2.5, Math.max(0.3, Number(b.portion) || 1));
       var n = 1;
       var keys = store.people.map(function (p) { return p.key; });
       while (keys.indexOf("p" + n) > -1) n++;
       store.people.push({ key: "p" + n, name: name, portion: portion });
-      return { ok: true, person: toKey(name) };
+      return { ok: true, person: RULES.toKey(name) };
     }
     var fm = path.match(/^\/api\/family\/person\/([a-z0-9]+)$/);
     if (fm && method === "DELETE") {
       var gone = store.people.filter(function (p) { return p.key === fm[1]; })[0];
       if (!gone) fail(404, "unknown person");
       store.people = store.people.filter(function (p) { return p !== gone; });
-      delete store.profiles[toKey(gone.name)];
+      delete store.profiles[RULES.toKey(gone.name)];
       return { ok: true };
     }
 
@@ -837,18 +777,16 @@ window.PHONE = { app: true };
         if (method !== "GET") {
           if (method !== "POST" && method !== "PUT" && method !== "DELETE") fail(405, "not allowed");
           var place = String(b.place || "");
-          if (FOOD_PLACES.indexOf(place) < 0) fail(400, CHOOSE_PLACE);
-          var text = tidyFood(b.text);
+          if (RULES.FOOD.PLACES.indexOf(place) < 0) fail(400, RULES.FOOD.CHOOSE);
+          var text = RULES.tidyFood(b.text);
           if (method === "POST") {
-            if (!text) fail(400, "Type what the food is, like “rice 2 kg”.");
-            if (food[place].length >= 100) fail(400, "That list is full. Remove something first.");
-            // The same thing twice in one place is left as one.
-            if (!food[place].some(function (x) { return x.toLowerCase() === text.toLowerCase(); })) food[place].push(text);
+            var added = RULES.addFood(food, place, text);
+            if (added) fail(400, added);
           } else if (method === "PUT") {
             // Edit: new wording `to`, and maybe a new place `toPlace`.
             var toPlace = b.toPlace === undefined ? place : String(b.toPlace);
-            if (FOOD_PLACES.indexOf(toPlace) < 0) fail(400, CHOOSE_PLACE);
-            var problem = changeFood(food, place, text, tidyFood(b.to), toPlace);
+            if (RULES.FOOD.PLACES.indexOf(toPlace) < 0) fail(400, RULES.FOOD.CHOOSE);
+            var problem = RULES.changeFood(food, place, text, RULES.tidyFood(b.to), toPlace);
             if (problem) fail(400, problem);
           } else if (b.text === undefined) {
             food[place] = [];
@@ -858,10 +796,10 @@ window.PHONE = { app: true };
         }
         // Each item says whether the plan builder has meals that use it ("known").
         var out = {};
-        FOOD_PLACES.forEach(function (where) {
+        RULES.FOOD.PLACES.forEach(function (where) {
           out[where] = food[where].map(function (line) { return { text: line, known: pb.kitchenStock([line]).unknown.length === 0 }; });
         });
-        return { food: out, places: FOOD_PLACES, fromPhotos: 0 };
+        return { food: out, places: RULES.FOOD.PLACES, fromPhotos: 0 };
       });
     }
     // Small steps: how a new food went for someone ("tried", "liked", "not yet", or "" to clear it).
