@@ -6,6 +6,11 @@
 // (or in localStorage when the pages are opened in an ordinary browser for testing).
 //
 // Nothing here talks to the internet. Each page loads this file first, before anything else.
+//
+// The pages are the web version's own files, unchanged. This file sets window.PHONE, which tells
+// them (and edition.js) to use the phone's wording and leave out web-only parts like logins and AI.
+window.PHONE = { app: true };
+
 (function () {
   "use strict";
 
@@ -107,7 +112,13 @@
   var QUESTIONS = null;
   function questions() {
     if (QUESTIONS) return Promise.resolve(QUESTIONS);
-    return realFetch("questions.json").then(function (r) { return r.json(); }).then(function (q) { QUESTIONS = q; return q; });
+    return realFetch("questions.json").then(function (r) { return r.json(); }).then(function (q) {
+      // Questions marked "webOnly" (like sharing blood test files) aren't asked on the phone, so
+      // answers to them aren't kept either.
+      q.sections.forEach(function (sec) { sec.questions = sec.questions.filter(function (x) { return !x.webOnly; }); });
+      QUESTIONS = q;
+      return q;
+    });
   }
   // Reads one of the app's own JSON files (library.json and so on).
   function json(file) {
@@ -167,15 +178,17 @@
 
   // ---------- Current food ----------
 
-  // The places food is kept, in the order the Current food page shows them.
-  var FOOD_PLACES = ["pantry", "fridge", "freezer", "other"];
+  // The places food is kept, in the order the Current food page shows them (the same as the
+  // web's api/currentfood.js).
+  var FOOD_PLACES = ["pantry", "spices", "fridge", "freezer", "bench", "other"];
+  var CHOOSE_PLACE = "Choose pantry, spices and seasonings, fridge, freezer, fruit bowl and bench, or other.";
 
   // One item as it is saved: no angle brackets, no extra spaces, at most 80 characters.
   function tidyFood(text) {
     return String(text == null ? "" : text).replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
   }
 
-  // The saved lists, {pantry: [], fridge: [], freezer: [], other: []}. The first time, an older
+  // The saved lists, {pantry: [], spices: [], fridge: [], ...}. The first time, an older
   // kitchen list (one list of lines) is sorted into places. `pb` is the plan builder.
   function currentFood(pb) {
     if (!store.food || typeof store.food !== "object") {
@@ -197,6 +210,25 @@
     var out = [];
     FOOD_PLACES.forEach(function (place) { food[place].forEach(function (text) { out.push({ text: text, place: place }); }); });
     return out;
+  }
+
+  // Changes one item: `text` in `place` becomes `to`, in `toPlace`, keeping its spot in the list
+  // (the same as the web's change() in api/currentfood.js). Gives back an error message, or "".
+  function changeFood(food, place, text, to, toPlace) {
+    var at = food[place].indexOf(text);
+    if (at < 0) return "That isn’t on the list any more.";
+    if (!to) return "Type what the food is, like “rice 2 kg”.";
+    var same = function (x) { return x.toLowerCase() === to.toLowerCase(); };
+    if (toPlace === place) {
+      // If the new wording is already on this list, the two become one.
+      if (food[place].some(function (x, i) { return i !== at && same(x); })) food[place].splice(at, 1);
+      else food[place][at] = to;
+      return "";
+    }
+    if (!food[toPlace].some(same) && food[toPlace].length >= 100) return "That list is full. Remove something first.";
+    food[place].splice(at, 1);
+    if (!food[toPlace].some(same)) food[toPlace].push(to);
+    return "";
   }
 
   // One entry per thing on Current food (or on an older kitchen list not yet sorted), so Family
@@ -693,15 +725,18 @@
       var by = Object.assign({}, (store.state.shared && store.state.shared.by) || {});
       var still = {};
       var now = Date.now();
+      // Only lists of item ids are kept, so one odd save can't stop later ticks from saving.
+      var ticks = {};
       Object.keys(b.ticks).forEach(function (week) {
-        var was = prev[week] || [];
-        (Array.isArray(b.ticks[week]) ? b.ticks[week] : []).forEach(function (id) {
+        var was = Array.isArray(prev[week]) ? prev[week] : [];
+        ticks[week] = (Array.isArray(b.ticks[week]) ? b.ticks[week] : []).filter(function (id) { return typeof id === "string" || typeof id === "number"; });
+        ticks[week].forEach(function (id) {
           still[week + "|" + id] = 1;
           if (was.indexOf(id) < 0) by[week + "|" + id] = { who: firstPerson(), at: now };
         });
       });
       Object.keys(by).forEach(function (k) { if (!still[k]) delete by[k]; });
-      store.state.shared = { ticks: b.ticks, by: by };
+      store.state.shared = { ticks: ticks, by: by };
       store.state.updated.shared = now;
       return { ok: true, by: by };
     }
@@ -800,15 +835,21 @@
       return builder().then(function (pb) {
         var food = currentFood(pb);
         if (method !== "GET") {
-          if (method !== "POST" && method !== "DELETE") fail(405, "not allowed");
+          if (method !== "POST" && method !== "PUT" && method !== "DELETE") fail(405, "not allowed");
           var place = String(b.place || "");
-          if (FOOD_PLACES.indexOf(place) < 0) fail(400, "Choose pantry, fridge, freezer or other.");
+          if (FOOD_PLACES.indexOf(place) < 0) fail(400, CHOOSE_PLACE);
           var text = tidyFood(b.text);
           if (method === "POST") {
             if (!text) fail(400, "Type what the food is, like “rice 2 kg”.");
             if (food[place].length >= 100) fail(400, "That list is full. Remove something first.");
             // The same thing twice in one place is left as one.
             if (!food[place].some(function (x) { return x.toLowerCase() === text.toLowerCase(); })) food[place].push(text);
+          } else if (method === "PUT") {
+            // Edit: new wording `to`, and maybe a new place `toPlace`.
+            var toPlace = b.toPlace === undefined ? place : String(b.toPlace);
+            if (FOOD_PLACES.indexOf(toPlace) < 0) fail(400, CHOOSE_PLACE);
+            var problem = changeFood(food, place, text, tidyFood(b.to), toPlace);
+            if (problem) fail(400, problem);
           } else if (b.text === undefined) {
             food[place] = [];
           } else {
@@ -820,7 +861,7 @@
         FOOD_PLACES.forEach(function (where) {
           out[where] = food[where].map(function (line) { return { text: line, known: pb.kitchenStock([line]).unknown.length === 0 }; });
         });
-        return { food: out, places: FOOD_PLACES };
+        return { food: out, places: FOOD_PLACES, fromPhotos: 0 };
       });
     }
     // Small steps: how a new food went for someone ("tried", "liked", "not yet", or "" to clear it).
@@ -1005,9 +1046,14 @@
     return handle(url, init || (typeof input === "object" ? { method: input.method } : undefined));
   };
 
-  // For pages that need to wait for the data (such as the first-run check below).
+  // For pages that need to wait for the data.
   window.LocalAPI = {
     ready: ready,
     hasPlan: function () { return ready.then(function () { return !!store.plan; }); },
   };
+
+  // First run: the main page has nothing to show without a plan, so it goes to Family and plan.
+  if (/(^|\/)(index\.html)?$/.test(location.pathname)) {
+    window.LocalAPI.hasPlan().then(function (has) { if (!has) location.replace("setup.html"); });
+  }
 })();

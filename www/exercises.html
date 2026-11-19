@@ -7,9 +7,10 @@
 -->
 <html lang="en-AU">
 <head>
-<script src="local-api.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="local-api.js"></script>
+<script src="edition.js"></script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f5f4">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121214">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -35,19 +36,22 @@ h1{font-size:1.5rem;margin:0 0 .2rem}
 .chips button{flex:none;font:inherit;font-size:.85rem;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:1.2rem;padding:.25rem .8rem;min-height:2.3rem;cursor:pointer}
 .chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .bar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:0 0 .7rem}
-input[type=search],select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:.5rem;padding:.45rem .6rem;min-height:2.6rem}
+input[type=search],select{font:inherit;color:var(--ink);background:var(--card);border:1px solid color-mix(in srgb,var(--mute) 70%,var(--card));border-radius:.5rem;padding:.45rem .6rem;min-height:2.6rem}
 input[type=search]{flex:1;min-width:10rem}
 .toggle{display:flex;align-items:center;gap:.4rem;font-size:.9rem;min-height:2.6rem;cursor:pointer}
 .toggle input{width:1.2rem;height:1.2rem;accent-color:var(--accent)}
 .count{color:var(--mute);font-size:.85rem;margin:0 0 .5rem}
 .ex{background:var(--card);border:1px solid var(--line);border-radius:.8rem;padding:.75rem 1rem;margin:0 0 .6rem}
-.ex.off{opacity:.65}
+.ex.off{border-style:dashed;background:var(--bg)}
+.ex.off h2{color:var(--mute)}   /* left out of plans: a dashed card, not faded text */
 .ex h2{font-size:1.02rem;margin:0;display:flex;justify-content:space-between;gap:.5rem;align-items:baseline}
 .ex h2 small{font-weight:400;color:var(--mute);font-size:.8rem;white-space:nowrap}
 .meta{display:flex;flex-wrap:wrap;gap:.3rem;margin:.35rem 0}
 .tag{font-size:.75rem;border-radius:1rem;padding:.08rem .5rem;background:var(--chip)}
 .tag.warn{background:transparent;border:1px solid var(--mid);color:var(--ink)}
 .ex p{margin:.25rem 0;font-size:.93rem}
+.ex .watch{font-size:.88rem;color:var(--mute)}
+.ex .watch a{display:inline-block;padding:.35rem .1rem;font-weight:700;color:var(--accent)}
 .ex .acts{display:flex;justify-content:flex-end;margin-top:.3rem}
 .ex .acts .btn{font-size:.82rem;min-height:2.3rem;padding:.25rem .7rem}
 .msg{border-radius:.6rem;padding:.6rem .8rem;margin:0 0 .8rem;font-size:.9rem;background:color-mix(in srgb,var(--low) 14%,var(--card));border:1px solid var(--low)}
@@ -61,7 +65,7 @@ input[type=search]{flex:1;min-width:10rem}
 <main>
   <div class="top">
     <div><h1>Exercise library</h1><p class="sub">The exercises the app’s plan builder chooses from</p></div>
-    <a class="btn" id="back" href="index.html">← Back</a>
+    <a class="btn" id="back" href="./">← Back</a>
   </div>
   <div id="msg"></div>
   <p class="note">Each one says what it needs and what it loads most. When you build a plan without AI, workouts are picked from here to suit your equipment and what you said in About me. To change an exercise in your plan, tap <b>Swap</b> next to it on the Exercise tab.</p>
@@ -139,6 +143,28 @@ function drawTypes() {
   });
 }
 
+// Links to watch how an exercise is done, opened in a new tab: a chosen demo video when the
+// library has one, and a YouTube search for the exercise's name.
+function watchHow(e) {
+  var p = el("p", "watch");
+  p.appendChild(document.createTextNode("Watch how: "));
+  // One link that opens in a new tab.
+  var link = function (text, href, label) {
+    var a = el("a", null, text);
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.setAttribute("aria-label", label + " (opens in a new tab)");
+    return a;
+  };
+  if (e.video && /^https:\/\//.test(e.video)) {
+    p.appendChild(link("Demo video", e.video, "Demo video of " + e.name));
+    p.appendChild(document.createTextNode(" · "));
+  }
+  p.appendChild(link("YouTube", "https://www.youtube.com/results?search_query=" + encodeURIComponent(e.name + " exercise how to"), "Find videos of " + e.name + " on YouTube"));
+  return p;
+}
+
 // Draws the list of exercises for the chosen kind, marking which suit the person and which they
 // left out, with a button to leave each one out (or bring it back).
 function draw() {
@@ -168,6 +194,7 @@ function draw() {
     e.flags.forEach(function (f) { if (FLAG[f]) meta.appendChild(el("span", "tag" + (f === "chair" ? "" : " warn"), FLAG[f])); });
     card.appendChild(meta);
     card.appendChild(el("p", null, e.how));
+    card.appendChild(watchHow(e));
     if (!fitOnly || off) {
       if (!fits[e.id]) card.appendChild(el("p", "note", "Not picked for you: it needs equipment you didn’t list, or loads something you mentioned in About me."));
     }
@@ -202,7 +229,7 @@ $("who").onchange = function () { PERSON = this.value; load().catch(function (e)
 drawTypes();
 // Back to More, in the week the app was last on.
 try {
-  var place = /^#week-(\d+)/.exec(localStorage.getItem("coles-plan-place") || "");
+  var place = /^#week-(\d+)/.exec(localStorage.getItem("plan-place") || "");
   $("back").href = "./#week-" + (place ? place[1] : "1") + "-more";
 } catch (e) {}
 

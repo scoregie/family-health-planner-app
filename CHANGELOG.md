@@ -2,6 +2,27 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.7.0 (2026-11-19)
+
+Catches up with the web version (v1.10.1, and two changes waiting to be released there), and now
+uses the web's pages unchanged:
+
+- **Current food: an Edit button on every item**, to fix the wording or move it to another place.
+  Two more lists: **Spices and seasonings** and **Fruit bowl and bench**.
+- **Your country can be changed in Settings.** The card was hidden in the app before, although
+  Family and plan pointed there.
+- **Week 1 is "#week-1".** The address (and the cardio "How did that feel?" labels) count weeks as
+  the plan names them; before, Stock-up 1 counted as a week.
+- **Easier to use** (from the web version's review): readable red messages in dark mode, text boxes
+  with visible edges, pop-up messages read out by screen readers, bigger tap areas, keyboard focus
+  kept on the button pressed, and labels for fields that had none.
+- **Fixes from the web version:** About me answers typed just before leaving the page are saved,
+  shopping ticks can't be stopped by one odd save, the app moves on to the new day when left open
+  overnight.
+- Progress leaves out the steps, workout and Lose It charts and columns the app can't fill yet.
+- Behind the scenes: the pages are the web version's own files, and `tools/port-from-web.sh`
+  copies them across, so future updates from the web are a copy rather than a merge.
+
 ## v0.6.0 (2026-11-19)
 
 Cardio levels from the web version (v1.10.1), and its newer plan builder:
