@@ -2,6 +2,20 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.8.0 (2026-11-19)
+
+Catches up with the web version (v1.12.2):
+
+- **"Didn't have it?"** On a meal, "Rate or skip" lets you say why it wasn't eaten (no time, too
+  much effort, missing ingredients, ate out, didn't want to eat it, and more). The next plan
+  takes it into account: quicker dinners after busy weeks, and dishes someone didn't want offered
+  less often for them.
+- **"How the week went"**, a new page (linked from Progress, with a card on Today): what went
+  well, what was harder, and one thing to consider next week, for last week or this week so far.
+  It is worked out on the phone from what's stored there.
+- **Cardio steps and new foods tried are now dated**, so they show up in the week they happened.
+- **Easier pages** from the web version's review: clearer empty pages and buttons.
+
 ## v0.7.0 (2026-11-19)
 
 Catches up with the web version (v1.11.0), and now
