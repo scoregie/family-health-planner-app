@@ -27,8 +27,9 @@ It's a planning tool, not medical advice. The app asks people to check their pla
 
 - [Capacitor](https://capacitorjs.com) 8 wraps the web pages in `www/` as native iOS and Android apps.
 - The pages were written for the self-hosted server and call addresses like `/api/state`. In the app, `www/local-api.js` answers those calls on the phone and keeps everything in one JSON file in the app's private storage.
-- These files are copied unchanged from the web version, so fixes there can be copied straight across: the plan builder (`planbuilder.js`), the vegetable and fruit targets it aims for (`healthtargets.js`), its data (`library.json`, `library-prices.json`, `exercises.json`), the countries and stores (`regions.js`), the guidelines and the fonts. The About me questions are the web version's without the blood test question (the app has no file uploads), and `library.json` also carries the web's shared-library dishes and snacks. `tools/build_library.py` rebuilds the meal library.
-- The pages (`index.html`, `settings.html` and so on) are the web version's with small changes for the app: no logins, AI or Health sync, a Backup section in Settings, and "Family and plan" instead of Plan setup.
+- The pages (`index.html` and its `app-*.js` files, `settings.html` and so on), the plan builder (`planbuilder.js`, `cardio.js`, `healthtargets.js`), the About me questions, the countries and stores, the guidelines and the fonts are the web version's own files, **unchanged**. `local-api.js` sets `window.PHONE`, and the web's `edition.js` then switches the pages to the phone's wording and leaves out web-only parts (logins, AI, Apple Health sync, uploads); Settings gets a Backup section and Plan setup becomes "Family and plan".
+- To bring the app up to date with the web version: `tools/port-from-web.sh ../family-meal-planner` copies those files, then check `local-api.js` answers any new or changed `/api` address.
+- The app keeps its own `library.json` and `exercises.json`: the web's plus its shared-library dishes, snacks and exercises. `tools/build_library.py` rebuilds the meal library.
 - The fonts are bundled in `www/fonts/`, so nothing is loaded from the internet.
 
 ## Building it yourself

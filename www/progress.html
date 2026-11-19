@@ -7,9 +7,10 @@
 -->
 <html lang="en-AU">
 <head>
-<script src="local-api.js"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="local-api.js"></script>
+<script src="edition.js"></script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f5f4">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121214">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -75,7 +76,7 @@ section.card .note{color:var(--mute);font-size:.85rem;margin:.15rem 0 .4rem}
 /* Weigh-ins */
 .weigh form{display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin:.5rem 0 0}
 .weigh label{display:block;font-size:.85rem;color:var(--mute);margin:0 0 .2rem}
-input[type=number],input[type=date]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:.5rem;padding:.45rem .6rem;min-height:2.5rem}
+input[type=number],input[type=date]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid color-mix(in srgb,var(--mute) 70%,var(--card));border-radius:.5rem;padding:.45rem .6rem;min-height:2.5rem}
 input[type=number]{width:7rem}
 .weigh ul{list-style:none;margin:.7rem 0 0;padding:0}
 .weigh li{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.3rem 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
@@ -98,7 +99,8 @@ th{color:var(--mute);font-weight:700}
 .msg.err{background:color-mix(in srgb,var(--low) 14%,var(--card));border:1px solid var(--low)}
 .msg.info{background:color-mix(in srgb,var(--accent) 12%,var(--card));border:1px solid var(--accent)}
 .status{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:.45rem .9rem;border-radius:1.2rem;font-size:.85rem;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.status.err{background:var(--low);color:#fff}
+.status:empty{opacity:0;pointer-events:none}
+.status.err{background:var(--low);color:var(--bg)}
 .privacy{color:var(--mute);font-size:.85rem;margin:1.2rem 0 0}
 #app.loading{opacity:.55;transition:opacity .2s}
 [hidden]{display:none!important}
@@ -110,12 +112,11 @@ th{color:var(--mute);font-weight:700}
 <main>
   <div class="top">
     <div><h1>Progress</h1><p class="sub" id="sub">Loading…</p></div>
-    <a class="btn" href="index.html">← Back to the plan</a>
+    <a class="btn" href="./">← Back to the app</a>
   </div>
   <div id="pmsg"></div>
   <div id="app" hidden>
-    <!-- Apple Health sync is for the web version; the app reads phone health data in a later version. -->
-    <section class="card hsync" hidden>
+    <section class="card hsync" data-web-only>
       <details id="syncFold">
         <summary><b>Apple Health sync</b> <span class="hsline" id="syncLine">Checking…</span></summary>
         <div id="syncBody"></div>
@@ -131,7 +132,7 @@ th{color:var(--mute);font-weight:700}
     <div id="charts"></div>
     <section class="card weigh">
       <h2>Add a weigh-in</h2>
-      <p class="note">Add your weight here every week or so. Weight goes up and down day to day, so the trend matters more than one number.</p>
+      <p class="note" data-phone="Add your weight here every week or so. Weight goes up and down day to day, so the trend matters more than one number.">Weigh-ins typed in here are used before Apple Health or Lose It on the same day.</p>
       <form id="weighForm">
         <div><label for="wDate">Date</label><input type="date" id="wDate" required></div>
         <div><label for="wKg">Weight (kg)</label><input type="number" id="wKg" step="0.1" min="20" max="400" inputmode="decimal" required></div>
@@ -149,10 +150,10 @@ th{color:var(--mute);font-weight:700}
       <h2>Where these numbers come from</h2>
       <p class="note" id="sources"></p>
     </section>
-    <p class="privacy">This is saved only on this phone. Weight goes up and down day to day, so look at the trend over a few weeks. What your GP or dietitian tells you comes first.</p>
+    <p class="privacy" data-phone="This is saved only on this phone. Weight goes up and down day to day, so look at the trend over a few weeks. What your GP or dietitian tells you comes first.">Only you and the plan’s admins can see this page. Weight goes up and down day to day, so look at the trend over a few weeks. What your GP or dietitian tells you comes first.</p>
   </div>
 </main>
-<div class="status" id="status" role="status" hidden></div>
+<div class="status" id="status" role="status"></div>
 <script>
 // The progress page. It asks the server for week-by-week numbers (GET /api/progress) and draws
 // one chart per measure as an SVG picture. Each chart shows one thing, so it needs no legend:
@@ -201,20 +202,26 @@ function api(method, url, body) {
   };
   return fetch(url, options).then(function (response) {
     return response.json().catch(function () { return {}; }).then(function (data) {
-      if (!response.ok) throw new Error(data.error || "Error " + response.status);
+      if (!response.ok) throw new Error(data.error || "The server said " + response.status);
       return data;
     });
   });
 }
 
-// Shows a short message at the bottom of the screen.
+// Shows a short message at the bottom of the screen (red for errors). The box stays on the page
+// and is filled a moment after it is cleared, so screen readers read each new message. Other
+// messages go after 5 seconds; errors stay until they are tapped or the next message comes.
 function status(text, isError) {
   var s = $("status");
-  s.textContent = text;
-  s.className = "status" + (isError ? " err" : "");
-  s.hidden = false;
   clearTimeout(status.timer);
-  status.timer = setTimeout(function () { s.hidden = true; }, isError ? 6000 : 2500);
+  clearTimeout(status.fill);
+  s.className = "status" + (isError ? " err" : "");
+  s.textContent = "";
+  s.onclick = function () { s.textContent = ""; };
+  status.fill = setTimeout(function () {
+    s.textContent = text;
+    if (!isError) status.timer = setTimeout(function () { s.textContent = ""; }, 5000);
+  }, 50);
 }
 
 // "2026-11-02" to "2 Nov".
@@ -295,16 +302,18 @@ function chartCard(spec) {
   return card;
 }
 
-// Draws a line chart as an SVG picture (no chart library), with dots you can tap to see each value.
-function drawChart(box, spec) {
-  box.textContent = "";
-  var W = Math.max(260, Math.round(box.clientWidth || 600));
-  var H = W < 420 ? 170 : 200;
-  var pad = { l: 44, r: 10, t: 10, b: 24 };
-  var plotW = W - pad.l - pad.r;
-  var plotH = H - pad.t - pad.b;
-  var pts = spec.points;
-  var values = pts.map(function (p) { return p.value; }).filter(function (v) { return v != null; });
+// Works out a chart's measurements from the width of its box. Returns `c`, which the drawing
+// steps below share: the size (W, H, pad, plotW, plotH), the points (pts), the y-axis (low, high,
+// ticks), y(value) and cx(i) which turn a value and a week's position into places on the
+// picture, and step (the width each week gets).
+function chartLayout(box, spec) {
+  var c = { spec: spec, pts: spec.points };
+  c.W = Math.max(260, Math.round(box.clientWidth || 600));
+  c.H = c.W < 420 ? 170 : 200;
+  c.pad = { l: 44, r: 10, t: 10, b: 24 };
+  c.plotW = c.W - c.pad.l - c.pad.r;
+  c.plotH = c.H - c.pad.t - c.pad.b;
+  var values = c.pts.map(function (p) { return p.value; }).filter(function (v) { return v != null; });
   if (spec.goal) values.push(spec.goal);
 
   // The y-axis. Bars start at zero (their length is the value). A line zooms in on its range.
@@ -315,84 +324,100 @@ function drawChart(box, spec) {
     low -= spare;
     high += spare;
   }
-  var ticks = niceTicks(low, high, 4);
-  low = ticks[0];
-  high = ticks[ticks.length - 1];
-  var y = function (v) { return pad.t + plotH - (v - low) / (high - low) * plotH; };
-  var step = plotW / pts.length;   // each week gets the same width
-  var cx = function (i) { return pad.l + step * (i + 0.5); };
+  c.ticks = niceTicks(low, high, 4);
+  c.low = c.ticks[0];
+  c.high = c.ticks[c.ticks.length - 1];
+  c.y = function (v) { return c.pad.t + c.plotH - (v - c.low) / (c.high - c.low) * c.plotH; };
+  c.step = c.plotW / c.pts.length;   // each week gets the same width
+  c.cx = function (i) { return c.pad.l + c.step * (i + 0.5); };
+  return c;
+}
 
-  chartCount++;
-  var hatchId = "hatch" + chartCount;
-  var root = svg("svg", { viewBox: "0 0 " + W + " " + H, width: W, height: H, role: "img", tabindex: 0,
-    "aria-label": spec.title + ". " + describe(spec) + " Use the left and right arrow keys to read each week." });
+// Draws what is behind the values: the grid lines with their numbers, the dates along the
+// bottom, and the goal line.
+function drawAxes(root, c) {
+  var spec = c.spec, pad = c.pad;
   // Diagonal lines for estimated bars, so they differ by pattern as well as by colour.
   var defs = svg("defs", {});
-  var pattern = svg("pattern", { id: hatchId, "class": "hatch", patternUnits: "userSpaceOnUse", width: 5, height: 5, patternTransform: "rotate(45)" });
+  var pattern = svg("pattern", { id: c.hatchId, "class": "hatch", patternUnits: "userSpaceOnUse", width: 5, height: 5, patternTransform: "rotate(45)" });
   pattern.appendChild(svg("line", { x1: 0, y1: 0, x2: 0, y2: 5 }));
   defs.appendChild(pattern);
   root.appendChild(defs);
-  ticks.forEach(function (t) {
-    root.appendChild(svg("line", { "class": t === low && spec.kind === "bar" ? "base" : "grid", x1: pad.l, x2: W - pad.r, y1: y(t), y2: y(t) }));
-    var label = svg("text", { x: pad.l - 6, y: y(t) + 4, "text-anchor": "end" });
+  c.ticks.forEach(function (t) {
+    root.appendChild(svg("line", { "class": t === c.low && spec.kind === "bar" ? "base" : "grid", x1: pad.l, x2: c.W - pad.r, y1: c.y(t), y2: c.y(t) }));
+    var label = svg("text", { x: pad.l - 6, y: c.y(t) + 4, "text-anchor": "end" });
     label.textContent = fmt(t, spec.tickPlaces || 0);
     root.appendChild(label);
   });
   // Date labels along the bottom: as many as fit without crowding.
-  var every = Math.max(1, Math.ceil(pts.length / Math.floor(plotW / 56)));
-  pts.forEach(function (p, i) {
-    if ((pts.length - 1 - i) % every) return;
-    var label = svg("text", { x: cx(i), y: H - 6, "text-anchor": "middle" });
+  var every = Math.max(1, Math.ceil(c.pts.length / Math.floor(c.plotW / 56)));
+  c.pts.forEach(function (p, i) {
+    if ((c.pts.length - 1 - i) % every) return;
+    var label = svg("text", { x: c.cx(i), y: c.H - 6, "text-anchor": "middle" });
     label.textContent = shortDate(p.week);
     root.appendChild(label);
   });
   if (spec.goal) {
-    root.appendChild(svg("line", { "class": "goal", x1: pad.l, x2: W - pad.r, y1: y(spec.goal), y2: y(spec.goal) }));
+    root.appendChild(svg("line", { "class": "goal", x1: pad.l, x2: c.W - pad.r, y1: c.y(spec.goal), y2: c.y(spec.goal) }));
   }
+}
 
-  var marks = [];   // one group per week, for the hover
-  if (spec.kind === "bar") {
-    var barW = Math.max(2, Math.min(28, step - Math.max(2, step * 0.3)));
-    pts.forEach(function (p, i) {
-      var g = svg("g", {});
-      if (p.value != null && p.value > 0) {
-        // An outlined bar is drawn 0.75px inside, so its outline lines up with the solid bars.
-        var inset = p.est ? 0.75 : 0;
-        var bar = svg("path", { "class": "bar" + (p.est ? " est" : ""),
-          d: barPath(cx(i) - barW / 2 + inset, y(p.value) + inset, barW - 2 * inset, y(low) - y(p.value) - inset) });
-        if (p.est) bar.style.fill = "url(#" + hatchId + ")";
-        g.appendChild(bar);
-      }
-      root.appendChild(g);
-      marks.push(g);
-    });
-  } else {
-    // The line breaks where a week has no value, rather than guessing across the gap.
-    var d = "";
-    pts.forEach(function (p, i) {
-      if (p.value == null) return;
-      var joined = i > 0 && pts[i - 1].value != null;
-      d += (joined ? "L" : "M") + cx(i).toFixed(1) + "," + y(p.value).toFixed(1);
-    });
-    root.appendChild(svg("path", { "class": "ln", d: d }));
-    pts.forEach(function (p, i) {
-      var g = svg("g", {});
-      if (p.value != null) {
-        // A lone week (no neighbours) still shows as a dot. Otherwise dots are small and only the
-        // last one is drawn, with the others appearing on hover.
-        var alone = !(pts[i - 1] && pts[i - 1].value != null) && !(pts[i + 1] && pts[i + 1].value != null);
-        var last = !pts.slice(i + 1).some(function (q) { return q.value != null; });
-        g.appendChild(svg("circle", { "class": "dot", cx: cx(i), cy: y(p.value), r: 4, opacity: alone || last ? 1 : 0 }));
-      }
-      root.appendChild(g);
-      marks.push(g);
-    });
-  }
+// Draws a bar for each week. Returns one group per week, for the hover.
+function drawBars(root, c) {
+  var marks = [];
+  var barW = Math.max(2, Math.min(28, c.step - Math.max(2, c.step * 0.3)));
+  c.pts.forEach(function (p, i) {
+    var g = svg("g", {});
+    if (p.value != null && p.value > 0) {
+      // An outlined bar is drawn 0.75px inside, so its outline lines up with the solid bars.
+      var inset = p.est ? 0.75 : 0;
+      var bar = svg("path", { "class": "bar" + (p.est ? " est" : ""),
+        d: barPath(c.cx(i) - barW / 2 + inset, c.y(p.value) + inset, barW - 2 * inset, c.y(c.low) - c.y(p.value) - inset) });
+      if (p.est) bar.style.fill = "url(#" + c.hatchId + ")";
+      g.appendChild(bar);
+    }
+    root.appendChild(g);
+    marks.push(g);
+  });
+  return marks;
+}
 
-  // The hover layer: a full-height strip per week, so you only need to point at the right week.
-  var hair = svg("line", { "class": "hair", y1: pad.t, y2: pad.t + plotH, visibility: "hidden" });
+// Draws the line and a dot for each week. Returns one group per week, for the hover.
+function drawLine(root, c) {
+  var marks = [];
+  var pts = c.pts;
+  // The line breaks where a week has no value, rather than guessing across the gap.
+  var d = "";
+  pts.forEach(function (p, i) {
+    if (p.value == null) return;
+    var joined = i > 0 && pts[i - 1].value != null;
+    d += (joined ? "L" : "M") + c.cx(i).toFixed(1) + "," + c.y(p.value).toFixed(1);
+  });
+  root.appendChild(svg("path", { "class": "ln", d: d }));
+  pts.forEach(function (p, i) {
+    var g = svg("g", {});
+    if (p.value != null) {
+      // A lone week (no neighbours) still shows as a dot. Otherwise dots are small and only the
+      // last one is drawn, with the others appearing on hover.
+      var alone = !(pts[i - 1] && pts[i - 1].value != null) && !(pts[i + 1] && pts[i + 1].value != null);
+      var last = !pts.slice(i + 1).some(function (q) { return q.value != null; });
+      g.appendChild(svg("circle", { "class": "dot", cx: c.cx(i), cy: c.y(p.value), r: 4, opacity: alone || last ? 1 : 0 }));
+    }
+    root.appendChild(g);
+    marks.push(g);
+  });
+  return marks;
+}
+
+// Makes the chart answer to pointing, tapping and the arrow keys: a full-height strip per week
+// (so you only need to point at the right week) shows that week's value in a little box.
+// `marks` is the group drawn for each week. Returns the little box, to be added after the picture.
+function addChartHover(box, root, c, marks) {
+  var spec = c.spec, pts = c.pts, pad = c.pad;
+  var hair = svg("line", { "class": "hair", y1: pad.t, y2: pad.t + c.plotH, visibility: "hidden" });
   root.appendChild(hair);
   var tip = el("div", "tip");
+  tip.setAttribute("aria-live", "polite");   // reads out each week as the arrow keys move
   tip.hidden = true;
   var current = -1;
   // Shows the value of point i in a little box next to it.
@@ -406,8 +431,8 @@ function drawChart(box, spec) {
       if (dot) dot.setAttribute("opacity", j === i || dot.dataset.keep ? 1 : dot.dataset.base);
     });
     if (spec.kind !== "bar") {
-      hair.setAttribute("x1", cx(i));
-      hair.setAttribute("x2", cx(i));
+      hair.setAttribute("x1", c.cx(i));
+      hair.setAttribute("x2", c.cx(i));
       hair.setAttribute("visibility", "visible");
     }
     tip.textContent = "";
@@ -416,9 +441,9 @@ function drawChart(box, spec) {
     if (p.extra) tip.appendChild(el("span", null, p.extra));
     tip.appendChild(el("span", null, weekName(p.week)));
     tip.hidden = false;
-    var scale = box.clientWidth / W;
-    var left = cx(i) * scale;
-    var top = (p.value == null ? pad.t : y(p.value)) * scale;
+    var scale = box.clientWidth / c.W;
+    var left = c.cx(i) * scale;
+    var top = (p.value == null ? pad.t : c.y(p.value)) * scale;
     var tw = tip.offsetWidth;
     tip.style.left = Math.max(0, Math.min(box.clientWidth - tw, left - tw / 2)) + "px";
     tip.style.top = Math.max(-8, top - tip.offsetHeight - 10) + "px";
@@ -439,7 +464,7 @@ function drawChart(box, spec) {
     if (dot) dot.dataset.base = dot.getAttribute("opacity");
   });
   pts.forEach(function (p, i) {
-    var hit = svg("rect", { "class": "hit", x: pad.l + step * i, y: 0, width: step, height: pad.t + plotH });
+    var hit = svg("rect", { "class": "hit", x: pad.l + c.step * i, y: 0, width: c.step, height: pad.t + c.plotH });
     hit.addEventListener("pointerenter", function () { show(i); });
     hit.addEventListener("pointerdown", function () { show(i); });
     root.appendChild(hit);
@@ -452,10 +477,24 @@ function drawChart(box, spec) {
     if (e.key === "ArrowRight") { show(Math.min(pts.length - 1, current + 1)); e.preventDefault(); }
     if (e.key === "Escape") hide();
   });
+  return tip;
+}
+
+// Draws a line or bar chart as an SVG picture (no chart library), with a value for each week
+// that shows when you point at it, tap it, or use the arrow keys.
+function drawChart(box, spec) {
+  box.textContent = "";
+  var c = chartLayout(box, spec);
+  chartCount++;
+  c.hatchId = "hatch" + chartCount;
+  var root = svg("svg", { viewBox: "0 0 " + c.W + " " + c.H, width: c.W, height: c.H, role: "img", tabindex: 0,
+    "aria-label": spec.title + ". " + describe(spec) + " Use the left and right arrow keys to read each week." });
+  drawAxes(root, c);
+  var marks = spec.kind === "bar" ? drawBars(root, c) : drawLine(root, c);
+  var tip = addChartHover(box, root, c, marks);
   box.appendChild(root);
   box.appendChild(tip);
 }
-
 // A sentence for screen readers: "From 82.4 kg in the week of 4 Aug to 80.9 kg in the week of 3 Nov."
 function describe(spec) {
   var have = spec.points.filter(function (p) { return p.value != null; });
@@ -514,6 +553,22 @@ function renderTiles(d) {
   if (now) tile("This week so far", fmt(now.meals || 0) + " meals", "", fmt(now.sessions || 0) + " exercise sessions ticked");
 }
 
+// The charts that need Apple Health or Lose It: steps, cardio fitness, resting heart rate and
+// workout time. `points(field)` gives each week's value for a chart.
+function addHealthCharts(charts, points) {
+  charts.appendChild(chartCard({ title: "Steps (a day)", kind: "bar", unit: "steps", points: points("steps"),
+    note: "Average per day, from Apple Health or Lose It." }));
+  charts.appendChild(chartCard({ title: "Cardio fitness (VO2 max)", kind: "line", unit: "mL/kg/min", places: 1, points: points("vo2max"),
+    note: "Apple Watch’s estimate of how fit you are for cardio, from walks and runs outdoors. Higher is fitter.",
+    empty: "No readings yet. An Apple Watch records these on brisk outdoor walks and runs; Health sync or an Apple Health export brings them here." }));
+  charts.appendChild(chartCard({ title: "Resting heart rate (beats a minute)", kind: "line", unit: "bpm", points: points("resting_hr"),
+    note: "Weekly average from an Apple Watch. It often drops a little as fitness improves.",
+    empty: "No readings yet. These come from an Apple Watch, through Health sync or an Apple Health export." }));
+  charts.appendChild(chartCard({ title: "Workout time (minutes a week)", kind: "bar", unit: "min",
+    points: points("workout_minutes", function (w) { return w.workouts ? fmt(w.workouts) + (w.workouts === 1 ? " workout" : " workouts") : null; }),
+    note: "Workouts recorded in Apple Health.", empty: "No workouts recorded. These come from an Apple Health export." }));
+}
+
 // Every chart, in order. Charts with no data say so, rather than disappearing, except the
 // food charts, which pick Lose It when it has numbers and the app's estimate otherwise.
 function renderCharts(d) {
@@ -542,7 +597,7 @@ function renderCharts(d) {
       var n = d.weighIns.filter(function (x) { return x.date >= w.week && x.date < addDays(w.week, 7); }).length;
       return { week: w.week, value: w.weight, extra: n ? n + (n === 1 ? " weigh-in" : " weigh-ins") : null };
     }),
-    empty: "No weigh-ins yet. Add one below, set up Apple Health sync (at the top), or upload a Lose It or Apple Health export on the My files page.",
+    empty: window.PHONE ? "No weigh-ins yet. Add one below." : "No weigh-ins yet. Add one below, set up Apple Health sync (at the top), or upload a Lose It or Apple Health export on the My files page.",
   };
   if (d.goalWeight) weightSpec.key = [{ cls: "dash", text: "Goal " + fmt(d.goalWeight, 1) + " kg (from About me)" }];
   charts.appendChild(chartCard(weightSpec));
@@ -553,15 +608,13 @@ function renderCharts(d) {
     return Object.assign({}, p, { value: p.value == null || !window.Appearance ? p.value : Math.round(Appearance.energyValue(p.value)) });
   });
   charts.appendChild(chartCard({ title: "Energy eaten (" + unit + " a day)", kind: "bar", unit: unit, points: energy, key: estKey(energy),
-    note: "Average per day logged. From Lose It, or estimated from the meals you ticked." }));
+    note: window.PHONE ? "Average per day, estimated from the meals you ticked." : "Average per day logged. From Lose It, or estimated from the meals you ticked." }));
   var protein = food("protein_in", "plan_protein");
   charts.appendChild(chartCard({ title: "Protein (grams a day)", kind: "bar", unit: "g", points: protein, key: estKey(protein),
     note: "Average per day logged." }));
-  charts.appendChild(chartCard({ title: "Steps (a day)", kind: "bar", unit: "steps", points: points("steps"),
-    note: "Average per day, from Apple Health or Lose It." }));
-  charts.appendChild(chartCard({ title: "Workout time (minutes a week)", kind: "bar", unit: "min",
-    points: points("workout_minutes", function (w) { return w.workouts ? fmt(w.workouts) + (w.workouts === 1 ? " workout" : " workouts") : null; }),
-    note: "Workouts recorded in Apple Health.", empty: "No workouts recorded. These come from an Apple Health export." }));
+  // Steps, the Apple Watch readings and workouts come from Apple Health or Lose It, which the
+  // phone app doesn't read yet, so it leaves these charts out.
+  if (!window.PHONE) addHealthCharts(charts, points);
   charts.appendChild(chartCard({ title: "Exercise sessions ticked (a week)", kind: "bar", unit: "sessions", points: points("sessions"),
     note: "Sessions ticked as done on the Exercise tab.", empty: "Nothing ticked yet. Tick sessions on the Exercise tab as you do them." }));
   charts.appendChild(chartCard({ title: "Meals ticked as eaten (a week)", kind: "bar", unit: "meals",
@@ -584,6 +637,8 @@ function renderTable(d) {
   var cols = [["weight", "Weight (kg)", 1], ["energy_in", unit + " a day (Lose It)", 0, true], ["plan_kj", unit + " a day (ticked)", 0, true],
     ["protein_in", "Protein g (Lose It)", 0], ["plan_protein", "Protein g (ticked)", 0], ["steps", "Steps a day", 0],
     ["workout_minutes", "Workout min", 0], ["sessions", "Sessions ticked", 0], ["meals", "Meals ticked", 0], ["score", "Meal score", 1]];
+  // The phone app doesn't read Lose It or Apple Health yet, so those columns would always be empty.
+  if (window.PHONE) cols = cols.filter(function (c) { return ["energy_in", "protein_in", "steps", "workout_minutes"].indexOf(c[0]) < 0; });
   var head = el("tr");
   head.appendChild(el("th", null, "Week"));
   cols.forEach(function (c) { head.appendChild(el("th", null, c[1])); });
@@ -615,6 +670,7 @@ function renderManual(d) {
     remove.type = "button";
     remove.setAttribute("aria-label", "Remove the weigh-in on " + shortDate(m.date));
     remove.onclick = function () {
+      if (!confirm("Remove the weigh-in on " + shortDate(m.date) + " (" + fmt(m.weight, 1) + " kg)?")) return;
       api("DELETE", "/api/measurements?person=" + encodeURIComponent(PERSON) + "&id=" + m.id)
         .then(function () { status("Removed"); return load(); })
         .catch(function (e) { status(e.message, true); });
@@ -628,9 +684,17 @@ function renderManual(d) {
 function renderSources(d) {
   var names = { "lose-it": "Lose It", "apple-health": "Apple Health" };
   var parts = (d.imported || []).filter(function (i) { return i.at; }).map(function (i) {
-    return names[i.source] + " (" + i.name + ", read " + new Date(i.at).toLocaleDateString(Appearance.locale()) + ")";
+    var when = new Date(i.at).toLocaleDateString(Appearance.locale());
+    return names[i.source] + " (" + i.name + (i.error ? ", couldn’t be read on " + when + ": " + i.error + ". Upload it again to retry" : ", read " + when) + ")";
   });
-  $("sources").textContent = "Weight: the weigh-ins you add here. Food: an estimate from the meals ticked in this app, using each dish’s macros and your portion size. Exercise sessions and meals: your ticks in this app.";
+  if (window.PHONE) {
+    $("sources").textContent = "Weight: the weigh-ins you add here. Food: an estimate from the meals ticked in this app, using each dish’s macros and your portion size. Exercise sessions and meals: your ticks in this app.";
+    return;
+  }
+  $("sources").textContent = "Weight: weigh-ins typed in here, then Apple Health (an export file, then Health sync), then Lose It. Steps and workouts: Apple Health, then Lose It. " +
+    "Food: Lose It, or an estimate from the meals ticked in this app, using each dish’s macros and your portion size. " +
+    "Exercise sessions and meals: your ticks in this app. " +
+    (parts.length ? "Files read: " + parts.join("; ") + "." : "No Lose It or Apple Health files have been read yet. Upload them on the My files page.");
 }
 
 // Redraw in the new unit when kJ or kcal is changed in Settings.
@@ -646,10 +710,12 @@ function render(d) {
   renderTable(d);
   renderManual(d);
   renderSources(d);
+  renderSync();
 }
 
 // The Apple Health sync card at the top: a one-line status, and (opened) the details and the set-up link.
-var SYNCNAMES = { steps: "steps", active_energy: "Move", weight: "weight", energy_in: "food", protein_in: "protein", carbs_in: "carbs", fat_in: "fat" };
+var SYNCNAMES = { steps: "steps", active_energy: "Move", weight: "weight", energy_in: "food", protein_in: "protein", carbs_in: "carbs", fat_in: "fat",
+  vo2max: "cardio fitness", resting_hr: "resting heart rate" };
 // When the phone last sent numbers: "today, 7:05 am" or a date.
 function syncWhen(ms) {
   var d = new Date(ms);
@@ -658,6 +724,7 @@ function syncWhen(ms) {
 }
 // The Health sync section: when the phone last sent numbers, and how to set it up.
 function renderSync() {
+  if (window.PHONE) return;   // the Apple Health sync card is web-only
   var fold = $("syncFold"), line = $("syncLine"), body = $("syncBody");
   var who = PERSON && ME && PERSON !== ME.person ? "?person=" + encodeURIComponent(PERSON) : "";
   if (!fold.dataset.wired) {
@@ -679,8 +746,8 @@ function renderSync() {
       if (last.skipped && last.skipped.length) body.appendChild(el("p", "note err", "Couldn’t read: " + last.skipped.join(", ") + "."));
     }
     body.appendChild(el("p", "note", k.hasKey
-      ? "An iPhone shortcut sends your steps, Move, weight and food from Apple Health here when you plug your phone in at night."
-      : "Send your steps, Move, weight and food from Apple Health here every day, with a shortcut on your iPhone."));
+      ? "An iPhone shortcut sends your steps, Move, weight, food and Apple Watch cardio fitness from Apple Health here when you plug your phone in at night."
+      : "Send your steps, Move, weight, food and Apple Watch cardio fitness from Apple Health here every day, with a shortcut on your iPhone."));
     var a = el("a", "btn small" + (k.hasKey ? "" : " primary"), k.hasKey ? "Health sync settings" : "Set up Health sync");
     a.href = "health-sync.html" + who;
     body.appendChild(a);
@@ -697,7 +764,7 @@ function load() {
     $("app").classList.remove("loading");
     $("app").hidden = false;
     render(d);
-    if (d.waiting && d.waiting.length) importNow(d.waiting);
+    if (d.waiting && d.waiting.length && !triedImport) importNow(d.waiting);
   }).catch(function (e) {
     $("app").classList.remove("loading");
     $("pmsg").textContent = "";
@@ -707,10 +774,12 @@ function load() {
 
 // New export files were uploaded: read them, then reload the charts.
 var importing = false;
+var triedImport = false;   // reads files at most once each time the page is opened, so a problem can't loop
 // Reads the newest uploaded Lose It or Apple Health export now, and shows how it went.
 function importNow(waiting) {
   if (importing) return;
   importing = true;
+  triedImport = true;
   var box = $("importMsg");
   box.textContent = "";
   var apple = waiting.indexOf("apple-health") > -1;
@@ -783,7 +852,7 @@ fetch("/auth/me", { cache: "no-store" }).then(function (response) {
   return response.ok ? response.json() : null;
 }).then(function (me) {
   if (!me) {
-    return;
+    location.href = "/login?next=" + encodeURIComponent("/progress.html");
     return;
   }
   ME = me;
