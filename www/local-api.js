@@ -38,6 +38,7 @@ window.PHONE = { app: true };
       food: null,          // Current food: {pantry: [], fridge: [], freezer: [], other: []}, each a list of lines
       kitchen: [],         // the older single kitchen list (sorted into "food" the first time it is read)
       steps: {},           // person -> {"food they were offered": "tried" | "liked" | "not yet"}
+      weekLog: {},         // person -> [{at, kind: "cardio" | "tried", ...}], for "How the week went"
       nextId: 1,
     };
   }
@@ -79,14 +80,19 @@ window.PHONE = { app: true };
     return writing;
   }
 
-  // The rules the web server follows too (sharedrules.js) and the energy rule (energy.js): the web
-  // version's own files, loaded before the first request is answered.
+  // The rules the web server follows too (sharedrules.js), the energy rule (energy.js), the reasons
+  // for "Didn't have it?" (skipreasons.js) and the working out for "How the week went"
+  // (weeksummary.js): the web version's own files, loaded before the first request is answered.
   var RULES = null;
   var ENERGY = null;
-  var ready = Promise.all([load(), shared("sharedrules.js"), shared("energy.js")]).then(function (got) {
+  var SKIPS = null;
+  var WEEK = null;
+  var ready = Promise.all([load(), shared("sharedrules.js"), shared("energy.js"), shared("skipreasons.js"), shared("weeksummary.js")]).then(function (got) {
     var saved = got[0];
     RULES = got[1];
     ENERGY = got[2];
+    SKIPS = got[3];
+    WEEK = got[4];
     store = Object.assign(emptyStore(), saved || {});
     store.settings = Object.assign(emptyStore().settings, store.settings || {});
     store.state = Object.assign(emptyStore().state, store.state || {});
@@ -161,23 +167,35 @@ window.PHONE = { app: true };
   }
 
   // One person's feedback on meals from earlier plans (the same as the web's planextras.js):
-  //   {rated: {"lower-case dish name": average score out of 10}, notes: [{dish, note}]}.
+  //   {rated: {"lower-case dish name": average score out of 10}, notes: [{dish, note}],
+  //    skipped: [{dish, reasons: ["time", ...]}] (meals they didn't have, and why: skipreasons.js)}.
   function feedbackFor(person) {
     var byDish = {};
-    store.mealLog.filter(function (r) { return r.person === person && r.dish && (r.score != null || r.note); })
+    store.mealLog.filter(function (r) { return r.person === person && r.dish && (r.score != null || r.note || r.skip_reason); })
       .sort(function (a, b) { return (b.updated_at || 0) - (a.updated_at || 0); }).slice(0, 500)
       .forEach(function (r) {
-        var d = byDish[r.dish.toLowerCase()] || (byDish[r.dish.toLowerCase()] = { dish: r.dish, scores: [], notes: [] });
+        var d = byDish[r.dish.toLowerCase()] || (byDish[r.dish.toLowerCase()] = { dish: r.dish, scores: [], notes: [], skips: [] });
         if (r.score != null) d.scores.push(r.score);
         if (r.note) d.notes.push(r.note);
+        if (r.skip_reason) d.skips.push(r.skip_reason);
       });
-    var rated = {}, notes = [];
+    var rated = {}, notes = [], skipped = [];
     Object.keys(byDish).forEach(function (key) {
       var d = byDish[key];
       if (d.scores.length) rated[key] = Math.round(d.scores.reduce(function (n, x) { return n + x; }, 0) / d.scores.length * 10) / 10;
       d.notes.forEach(function (note) { if (notes.length < 20) notes.push({ dish: d.dish, note: note.slice(0, 200) }); });
+      if (d.skips.length && skipped.length < 30) skipped.push({ dish: d.dish, reasons: d.skips.slice(0, 10) });
     });
-    return { rated: rated, notes: notes };
+    return { rated: rated, notes: notes, skipped: skipped };
+  }
+
+  // Notes something for "How the week went" (the same as the web's weekreview.js): a cardio step
+  // ({kind: "cardio", moved, level}) or a small-step food tried ({kind: "tried", food, result}).
+  function remember(person, event) {
+    store.weekLog = isObj(store.weekLog) ? store.weekLog : {};
+    var log = Array.isArray(store.weekLog[person]) ? store.weekLog[person] : [];
+    log.push(Object.assign({ at: Date.now() }, event));
+    store.weekLog[person] = log.slice(-200);
   }
 
   // ---------- Current food ----------
@@ -326,10 +344,12 @@ window.PHONE = { app: true };
         if (!isObj(r) || id.length > 80) return;
         var s = Number.isInteger(r.s) && r.s >= 1 && r.s <= 10 ? r.s : undefined;
         var n = typeof r.n === "string" ? r.n.slice(0, 1000) : "";
-        if (!s && !n.trim()) return;
+        var x = SKIPS.valid(r.x) ? r.x : "";   // "Didn't have it": why
+        if (!s && !n.trim() && !x) return;
         var kept = {};
         if (s) kept.s = s;
         if (n.trim()) kept.n = n;
+        if (x) kept.x = x;
         if (typeof r.t === "string" && r.t) kept.t = r.t.slice(0, 300);
         w[id] = kept;
       });
@@ -364,8 +384,8 @@ window.PHONE = { app: true };
       Object.keys(ratings[week] || {}).forEach(function (id) { var r = slotFor(week, id); if (r) r.rating = ratings[week][id]; });
     });
     var mine = function (r) { return r.person === person && r.plan_id === planId && r.round === roundId; };
-    var firstEaten = {};
-    store.mealLog.filter(mine).forEach(function (r) { firstEaten[r.week + "|" + r.day + "|" + r.slot] = r.eaten_at; });
+    var before = {};   // each slot as it was saved last time
+    store.mealLog.filter(mine).forEach(function (r) { before[r.week + "|" + r.day + "|" + r.slot] = r; });
     store.mealLog = store.mealLog.filter(function (r) { return !mine(r); });
     Object.keys(current).forEach(function (key) {
       var row = current[key];
@@ -374,15 +394,24 @@ window.PHONE = { app: true };
       var rating = row.rating || {};
       var planned = rating.t || RULES.plannedDish(plan, row.week, row.day, row.slot, planKey);
       var dish = planned ? String(planned).replace(/\s*\(packed\)\s*$/i, "").trim() : null;
-      store.mealLog.push({
+      var old = before[key];
+      var saved = {
         person: person, plan_id: planId, round: roundId, week: row.week, week_name: week.name || null,
         day: row.day, slot: row.slot, dish: dish, eaten: row.eaten,
-        eaten_at: row.eaten ? (firstEaten[key] || now) : null,
+        eaten_at: row.eaten ? ((old && old.eaten_at) || now) : null,
         score: Number.isInteger(rating.s) ? rating.s : null,
         note: typeof rating.n === "string" && rating.n.trim() ? rating.n : null,
+        // Why they didn't have it (already checked). Ticked as eaten wins.
+        skip_reason: !row.eaten && typeof rating.x === "string" && rating.x ? rating.x : null,
         macros: dish && plan.macros ? (plan.macros[dish] || plan.macros[RULES.dishKey(dish)] || null) : null,
         updated_at: now,
-      });
+      };
+      // Only a slot that changed gets a new time, so updated_at says when it was ticked, rated or
+      // skipped ("How the week went" goes by it), not when the page last saved.
+      if (old && ["eaten", "dish", "score", "note", "skip_reason", "week_name"].every(function (k) { return (old[k] == null ? null : old[k]) === (saved[k] == null ? null : saved[k]); })) {
+        saved.updated_at = old.updated_at;
+      }
+      store.mealLog.push(saved);
     });
   }
 
@@ -737,6 +766,7 @@ window.PHONE = { app: true };
       if (!gone) fail(404, "unknown person");
       store.people = store.people.filter(function (p) { return p !== gone; });
       delete store.profiles[RULES.toKey(gone.name)];
+      if (isObj(store.weekLog)) delete store.weekLog[RULES.toKey(gone.name)];
       return { ok: true };
     }
 
@@ -817,6 +847,7 @@ window.PHONE = { app: true };
         Object.keys(tried).slice(-200).forEach(function (k) { kept[k] = tried[k]; });
         store.steps = store.steps || {};
         store.steps[person] = kept;
+        if (result === "tried" || result === "liked") remember(person, { kind: "tried", food: food, result: result });
         return { ok: true, tried: kept };
       }
     }
@@ -874,6 +905,7 @@ window.PHONE = { app: true };
         var after = CARDIO.feelAfter(answers.cardio_level, cardioSaved(person), id, b.feel, before.limit, before.guess, before.steady);
         store.settings.cardio = Object.assign({}, store.settings.cardio);
         store.settings.cardio[person] = after.saved;
+        if (after.moved) remember(person, { kind: "cardio", moved: after.moved, level: after.level });
         return Object.assign(cardioFor(person, pb), { moved: after.moved });
       });
     }
@@ -912,6 +944,28 @@ window.PHONE = { app: true };
     if (path === "/api/progress" && method === "GET") {
       var weeks = Math.min(52, Math.max(4, Number(q.get("weeks")) || 12));
       return summary(person, weeks);
+    }
+    // How the week went: the working out is the web's own file (weeksummary.js), given the records
+    // kept on this phone. It needs the health targets, which load with the plan builder.
+    if (path === "/api/week-review" && method === "GET") {
+      if (personKeys().indexOf(person) < 0) fail(404, "unknown person");
+      var which = q.get("week") === "this" ? "this" : "last";
+      return builder().then(function () {
+        var today = localDate(Date.now());
+        var span = WEEK.weekSpan(today, which);
+        var plan = store.plan || {};
+        var answers = (store.profiles[person] && store.profiles[person].answers) || {};
+        var inSpan = function (ms) { return ms != null && ms >= span.from && ms <= span.to; };
+        return Object.assign({ person: person, which: which, today: today }, WEEK.summarise({
+          today: today, which: which, plan: plan, answers: answers,
+          rows: store.mealLog.filter(function (r) { return r.person === person && (inSpan(r.eaten_at) || inSpan(r.updated_at)); }),
+          sessions: store.exLog.filter(function (s) { return s.person === person && inSpan(s.done_at); }),
+          log: (isObj(store.weekLog) && store.weekLog[person]) || [],
+          planKey: RULES.planKeyFor(plan, person),
+          localDate: localDate,
+          HealthTargets: TARGETS, SkipReasons: SKIPS,
+        }));
+      });
     }
     if (path === "/api/measurements" && method === "POST") {
       var date = String(b.date || "");
