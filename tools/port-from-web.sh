@@ -23,7 +23,7 @@ cd "$(dirname "$0")/.."
 # The pages and their scripts, styles and data, from site/.
 for f in index.html app-core.js app-shopping.js app-meals.js app-exercise.js app-today.js app-start.js \
          profile.html progress.html week.html settings.html setup.html exercises.html food.html \
-         edition.js page.js energy.js skipreasons.js appearance.js regions.js guidelines.js guidelines.json questions.json page.css \
+         edition.js page.js energy.js skipreasons.js plandates.js appearance.js regions.js guidelines.js guidelines.json questions.json page.css \
          plan.example.json manifest.webmanifest logo.svg icon-192.png icon-512.png apple-touch-icon.png; do
   cp "$WEB/site/$f" "www/$f"
 done
