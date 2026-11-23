@@ -81,18 +81,21 @@ window.PHONE = { app: true };
   }
 
   // The rules the web server follows too (sharedrules.js), the energy rule (energy.js), the reasons
-  // for "Didn't have it?" (skipreasons.js) and the working out for "How the week went"
-  // (weeksummary.js): the web version's own files, loaded before the first request is answered.
+  // for "Didn't have it?" (skipreasons.js), the working out for "How the week went"
+  // (weeksummary.js) and the plan's dates (plandates.js): the web version's own files, loaded
+  // before the first request is answered.
   var RULES = null;
   var ENERGY = null;
   var SKIPS = null;
   var WEEK = null;
-  var ready = Promise.all([load(), shared("sharedrules.js"), shared("energy.js"), shared("skipreasons.js"), shared("weeksummary.js")]).then(function (got) {
+  var DATES = null;
+  var ready = Promise.all([load(), shared("sharedrules.js"), shared("energy.js"), shared("skipreasons.js"), shared("weeksummary.js"), shared("plandates.js")]).then(function (got) {
     var saved = got[0];
     RULES = got[1];
     ENERGY = got[2];
     SKIPS = got[3];
     WEEK = got[4];
+    DATES = got[5];
     store = Object.assign(emptyStore(), saved || {});
     store.settings = Object.assign(emptyStore().settings, store.settings || {});
     store.state = Object.assign(emptyStore().state, store.state || {});
@@ -574,6 +577,14 @@ window.PHONE = { app: true };
   // Plans
   // ---------------------------------------------------------------------------
 
+  // The current plan's dates for Family and plan: {startDate, end, weeks} (dates null if it has none).
+  function currentDates() {
+    var plan = store.plan;
+    if (!plan || !Array.isArray(plan.weeks)) return null;
+    return { startDate: DATES.start(plan), end: DATES.end(plan), weeks: plan.weeks.filter(function (w) { return w && w.kind !== "stockup"; }).length };
+  }
+
+  // Saves a new or changed plan, keeping the old one as a backup.
   function savePlan(plan) {
     var old = store.plan;
     if (old) {
@@ -786,7 +797,19 @@ window.PHONE = { app: true };
         draft: store.draft ? draftPreview(store.draft) : null,
         kitchen: foodCount(),   // just how many things are on Current food, for the count on this page
         isExample: !store.plan,
+        current: currentDates(),
       };
+    }
+    // Plan dates: the Monday the current plan's Week 1 starts on (null for no dates). Ticks are kept.
+    if (path === "/api/plan/dates" && method === "PUT") {
+      if (!store.plan) fail(400, "Make and approve a plan first.");
+      if (b.startDate) {
+        if (!DATES.isMonday(String(b.startDate))) fail(400, "Pick a Monday for the plan to start on.");
+        store.plan.startDate = String(b.startDate);
+      } else {
+        delete store.plan.startDate;
+      }
+      return { ok: true, current: currentDates() };
     }
     if (path === "/api/plan/draft" && method === "POST") {
       if (!store.people.length) fail(400, "Add the people in your family first.");
@@ -858,7 +881,13 @@ window.PHONE = { app: true };
     var rm = path.match(/^\/api\/requests\/(\d+)\/(approve|decline)$/);
     if (rm && method === "POST") {
       if (!store.draft || store.draft.id !== Number(rm[1])) fail(404, "That draft has gone. Make a new one.");
-      if (rm[2] === "approve") savePlan(store.draft.plan);
+      if (rm[2] === "approve") {
+        // The new plan starts on the Monday picked on the page (or has no dates if none was).
+        if (b.startDate && !DATES.isMonday(String(b.startDate))) fail(400, "Pick a Monday for the plan to start on.");
+        if (b.startDate) store.draft.plan.startDate = String(b.startDate);
+        else delete store.draft.plan.startDate;
+        savePlan(store.draft.plan);
+      }
       store.draft = null;
       return { ok: true };
     }

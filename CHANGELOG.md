@@ -2,6 +2,16 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.10.0 (2026-11-23)
+
+Catches up with the web version (plan dates):
+
+- **Plan dates.** When you approve a plan in Family and plan, pick the Monday Week 1 starts on.
+  The week tabs then show their dates ("23–29 Nov"), each day shows its date, "Today" is only
+  marked in the week you're in, and the app opens at this week. Today says when a plan hasn't
+  started yet or has finished. A **Plan dates** card changes or clears the dates without losing
+  ticks. Plans without dates look as before.
+
 ## v0.9.0 (2026-11-23)
 
 Catches up with the web version (v1.13.0):
