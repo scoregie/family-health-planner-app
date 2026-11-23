@@ -2,6 +2,15 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.9.0 (2026-11-23)
+
+Catches up with the web version (v1.13.0):
+
+- **"Unwell" under "Didn't have it?"**, for a meal you didn't have because you were sick. On
+  those days, planned exercise sessions don't count as missed in "How the week went" (the page and
+  the Today card), which shows "Unwell on N days". The "To consider" line suggests easing back in,
+  and a GP or pharmacist if it carries on. The next plan doesn't change a dish because of it.
+
 ## v0.8.0 (2026-11-19)
 
 Catches up with the web version (v1.12.2):
