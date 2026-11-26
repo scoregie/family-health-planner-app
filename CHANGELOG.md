@@ -2,6 +2,23 @@
 
 Each version is tagged on GitHub (see Releases) with these notes.
 
+## v0.11.0 (2026-11-26)
+
+Catches up with the web version (v1.15.0, and shopping for the next plan):
+
+- **Your exercise week (About me).** A day-by-day grid with a morning and an afternoon slot.
+  Each slot can be Cardio, Swimming, Strength, or Stretch and mobility, with minutes, and for
+  strength the part of the body. The plan builder keeps these sessions on those days every week,
+  with workouts for each part of the body (harder in weeks 3 and 4). Seven new exercises cover
+  chest, shoulders and arms.
+- **What should your plan be built around? (About me).** With exercise first, snacks and eating
+  times follow your sessions, and serves count the energy the sessions use. For someone losing
+  weight, the deficit stays at their pace and rest days get a little less.
+- **Approving a plan for a later Monday.** If the Monday you pick in Family and plan is still to
+  come, the new plan waits: the current plan carries on, and the new one takes over that morning.
+  A **Next plan** card shows it, with **Start it now** and **Cancel it**. Its first shopping lists
+  are on the Shopping tab under **Next plan**, so you can shop ahead; what you tick stays ticked.
+
 ## v0.10.0 (2026-11-23)
 
 Catches up with the web version (plan dates):

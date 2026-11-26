@@ -30,6 +30,7 @@ window.PHONE = { app: true };
       plan: null,          // the plan in use
       backups: [],         // [{at, plan}] newest first
       draft: null,         // {id, title, created_at, plan, notes} waiting to be approved
+      next: null,          // {plan, startDate, approvedAt}: approved to start on a Monday still to come
       state: { users: {}, shared: null, have: [], updated: {}, epoch: Date.now() },
       mealLog: [],         // what was eaten and rated, kept across plans (for Progress)
       exLog: [],           // exercise sessions ticked
@@ -330,9 +331,34 @@ window.PHONE = { app: true };
         var list = typeof value === "string" ? [value] : value;
         var picked = Array.isArray(list) ? x.options.filter(function (o) { return list.indexOf(o) > -1; }) : [];
         if (picked.length) out[id] = picked;
+      } else if (x.type === "week") {
+        var week = cleanWeek(x, value);
+        if (week) out[id] = week;
       }
     });
     return out;
+  }
+
+  // Keeps only the parts of a "week" answer (Your exercise week) that fit its question, the same as
+  // the web server: {Mon: {morning: {kind, minutes}, afternoon: {kind, minutes, area}}, ...}. A slot
+  // needs a kind from the list; minutes and (for strength) the body area are kept when they are from
+  // the lists too. Gives null when no slot is left.
+  function cleanWeek(x, value) {
+    if (!isObj(value)) return null;
+    var out = {};
+    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach(function (day) {
+      var given = value[day];
+      if (!isObj(given)) return;
+      x.slots.forEach(function (pair) {
+        var s = given[pair[0]];
+        if (!isObj(s) || x.kinds.indexOf(s.kind) < 0) return;
+        var kept = { kind: s.kind };
+        if (x.minutes.indexOf(Number(s.minutes)) > -1) kept.minutes = Number(s.minutes);
+        if (s.kind === "Strength" && x.areas.indexOf(s.area) > -1) kept.area = s.area;
+        (out[day] = out[day] || {})[pair[0]] = kept;
+      });
+    });
+    return Object.keys(out).length ? out : null;
   }
 
   function cleanRatings(ratings) {
@@ -593,8 +619,11 @@ window.PHONE = { app: true };
     }
     store.plan = plan;
     if (!old || old.id !== plan.id) {
-      // A new plan: everyone's ticks start fresh. "At home" marks are kept (they go by name).
-      store.state = { users: {}, shared: null, have: store.state.have || [], updated: {}, epoch: Date.now() };
+      // A new plan: everyone's ticks start fresh. "At home" marks are kept (they go by name). If it
+      // is the plan that was waiting, what was ticked on its lists beforehand is kept.
+      var carried = store.next && store.next.plan.id === plan.id ? nextTicks() : null;
+      store.state = { users: {}, shared: carried, have: store.state.have || [], updated: {}, epoch: Date.now() };
+      if (carried) store.state.updated.shared = Date.now();
     }
     // The plan's people become the household (the builder keeps everyone's keys and names).
     if (plan.people) {
@@ -602,6 +631,65 @@ window.PHONE = { app: true };
         if (plan.people[p.key]) p.portion = plan.people[p.key].portion;
       });
     }
+  }
+
+  // ---------- the next plan (the web version's api/nextplan.js) ----------
+  // A whole new plan approved to start on a Monday still to come waits in store.next, and the plan in
+  // use carries on until then. Its first lists can be shopped before it starts: their ticks are kept
+  // under "n" and the week's place ("n1"), and move to the new plan's own weeks when it starts.
+
+  // Today's date on this phone: "2026-11-30".
+  function localToday() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  // The ticks made on the next plan's lists, under its own weeks' places: {ticks, by}, or null.
+  function nextTicks() {
+    var shared = store.state.shared || {};
+    var ticks = {}, by = {};
+    Object.keys(isObj(shared.ticks) ? shared.ticks : {}).forEach(function (week) {
+      var ids = shared.ticks[week];
+      if (/^n\d+$/.test(week) && Array.isArray(ids) && ids.length) ticks[week.slice(1)] = ids;
+    });
+    Object.keys(isObj(shared.by) ? shared.by : {}).forEach(function (key) {
+      if (/^n\d+\|/.test(key)) by[key.slice(1)] = shared.by[key];
+    });
+    return Object.keys(ticks).length ? { ticks: ticks, by: by } : null;
+  }
+
+  // Forgets the ticks on the next plan's lists (when it is cancelled).
+  function dropNextTicks() {
+    var shared = store.state.shared;
+    if (!shared || !isObj(shared.ticks)) return;
+    Object.keys(shared.ticks).forEach(function (week) { if (week.charAt(0) === "n") delete shared.ticks[week]; });
+    Object.keys(shared.by || {}).forEach(function (key) { if (key.charAt(0) === "n") delete shared.by[key]; });
+    store.state.updated.shared = Date.now();
+  }
+
+  // Puts the waiting plan in place of the one in use. Returns true if there was one.
+  function useNext() {
+    if (!store.next) return false;
+    savePlan(store.next.plan);
+    store.next = null;
+    return true;
+  }
+
+  // Uses the waiting plan if its start date has come (checked whenever a page asks for anything).
+  function switchNext() {
+    return !!store.next && localToday() >= store.next.startDate && useNext();
+  }
+
+  // The waiting plan's lists to shop before it starts: {startDate, currency, first, weeks}, with the
+  // weeks from its start to its first week with meals (`first`). Null if no plan is waiting.
+  function nextShopping() {
+    if (!store.next || !Array.isArray(store.next.plan.weeks)) return null;
+    var all = store.next.plan.weeks;
+    var first = -1;
+    for (var i = 0; i < all.length; i++) if (all[i] && all[i].kind !== "stockup") { first = i; break; }
+    if (first < 0) first = all.length - 1;
+    return { startDate: store.next.startDate, currency: store.next.plan.currency || null, first: first,
+      weeks: all.slice(0, first + 1).map(function (w) { return { name: w.name, kind: w.kind, cost: w.cost, shopping: w.shopping || {}, useUp: w.useUp }; }) };
   }
 
   // What Family and plan shows about a waiting draft: every day's meals, the cost, and for each
@@ -798,7 +886,19 @@ window.PHONE = { app: true };
         kitchen: foodCount(),   // just how many things are on Current food, for the count on this page
         isExample: !store.plan,
         current: currentDates(),
+        next: store.next ? { startDate: store.next.startDate, title: store.next.plan.title || null, approvedAt: store.next.approvedAt } : null,
       };
+    }
+    // The next plan: its first shopping lists, "Start it now" and "Cancel it".
+    if (path === "/api/plan/next/shopping" && method === "GET") return { next: nextShopping() };
+    if (path === "/api/plan/next/start" && method === "POST") {
+      if (!useNext()) fail(404, "There’s no plan waiting.");
+      return { ok: true };
+    }
+    if (path === "/api/plan/next" && method === "DELETE") {
+      store.next = null;
+      dropNextTicks();   // ticks on its lists have nothing to go to now
+      return { ok: true };
     }
     // Plan dates: the Monday the current plan's Week 1 starts on (null for no dates). Ticks are kept.
     if (path === "/api/plan/dates" && method === "PUT") {
@@ -886,7 +986,12 @@ window.PHONE = { app: true };
         if (b.startDate && !DATES.isMonday(String(b.startDate))) fail(400, "Pick a Monday for the plan to start on.");
         if (b.startDate) store.draft.plan.startDate = String(b.startDate);
         else delete store.draft.plan.startDate;
-        savePlan(store.draft.plan);
+        // A Monday still to come: the new plan waits, and the plan in use carries on until then.
+        if (b.startDate && String(b.startDate) > localToday()) {
+          store.next = { plan: store.draft.plan, startDate: String(b.startDate), approvedAt: new Date().toISOString() };
+        } else {
+          savePlan(store.draft.plan);
+        }
       }
       store.draft = null;
       return { ok: true };
@@ -1039,6 +1144,7 @@ window.PHONE = { app: true };
     var body = {};
     try { body = init && init.body ? JSON.parse(init.body) : {}; } catch (e) { return Promise.resolve(respond(400, { error: "bad request" })); }
     return ready.then(function () {
+      if (switchNext()) save();   // a waiting plan whose start date has come takes over
       if (url.pathname === "/plan.json" || url.pathname.slice(-10) === "/plan.json") {
         return store.plan
           ? new Response(JSON.stringify(store.plan), { status: 200, headers: { "Content-Type": "application/json" } })
